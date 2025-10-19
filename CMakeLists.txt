@@ -15,6 +15,8 @@ add_executable(substudio WIN32
     src/main.cpp
     src/mainwindow.cpp
     src/mainwindow.h
+    src/subtitlemodel.cpp
+    src/subtitlemodel.h
 )
 
 target_link_libraries(substudio PRIVATE Qt6::Widgets)
