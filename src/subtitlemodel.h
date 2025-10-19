@@ -25,6 +25,9 @@ public:
     bool loadSrt(const QString &filePath);
     void clear();
 
+    void setTextAt(int row, const QString &text);
+    bool saveSrt(const QString &filePath) const;
+
     enum Column {
         LineNumber = 0,
         StartTime,
@@ -38,4 +41,6 @@ private:
     QVector<SubtitleEntry> entries_;
     static double parseTimeToSeconds(const QString &timeStr);
     static int computeCPS(const SubtitleEntry &e);
+
+    friend class MainWindow; // optional: main window can access entries_ if needed
 };

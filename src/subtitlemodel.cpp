@@ -137,3 +137,40 @@ int SubtitleModel::computeCPS(const SubtitleEntry &e) {
     double cps = chars / dur;
     return static_cast<int>(std::round(cps));
 }
+
+void SubtitleModel::setTextAt(int row, const QString &text) {
+    if (row < 0 || row >= entries_.size()) return;
+    entries_[row].text = text;
+    entries_[row].cps = computeCPS(entries_[row]);
+    const QModelIndex top = index(row, Text);
+    const QModelIndex bottom = index(row, Text);
+    emit dataChanged(top, bottom, { Qt::DisplayRole });
+    // also update CPS column
+    emit dataChanged(index(row, CPS), index(row, CPS), { Qt::DisplayRole });
+}
+
+bool SubtitleModel::saveSrt(const QString &filePath) const {
+    QFile f(filePath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    QTextStream out(&f);
+    out.setGenerateByteOrderMark(false);
+    // write each entry in SRT format
+    for (int i = 0; i < entries_.size(); ++i) {
+        const SubtitleEntry &e = entries_.at(i);
+        // write index (use original lineNumber when present; otherwise i+1)
+        const int idx = (e.lineNumber > 0) ? e.lineNumber : (i + 1);
+        out << idx << '\n';
+        out << e.startTime << " --> " << e.endTime << '\n';
+
+        // write text (already may contain newlines)
+        const QStringList lines = e.text.split('\n');
+        for (const QString &ln : lines) {
+            out << ln << '\n';
+        }
+
+        // blank separator
+        out << '\n';
+    }
+    f.close();
+    return true;
+}

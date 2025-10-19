@@ -9,6 +9,11 @@
 #include <QHeaderView>
 #include <QMenu>
 #include <QAction>
+#include <QVBoxLayout>
+#include <QWidget>
+#include <QTextEdit>
+#include <QItemSelectionModel>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setupActions();
@@ -20,8 +25,17 @@ void MainWindow::setupActions() {
     openAction_->setShortcut(QKeySequence::Open);
     connect(openAction_, &QAction::triggered, this, &MainWindow::onOpenFile);
 
+    saveAction_ = new QAction(tr("Save"), this);
+    saveAction_->setShortcut(QKeySequence::Save);
+    connect(saveAction_, &QAction::triggered, this, &MainWindow::onSave);
+
+    saveAsAction_ = new QAction(tr("Save As..."), this);
+    connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveAs);
+
     QMenu *fileMenu = menuBar()->addMenu(tr("File"));
     fileMenu->addAction(openAction_);
+    fileMenu->addAction(saveAction_);
+    fileMenu->addAction(saveAsAction_);
     fileMenu->addAction(tr("Exit"), this, &QMainWindow::close);
 }
 
@@ -29,13 +43,29 @@ void MainWindow::setupUi() {
     resize(1000, 700);
     setWindowTitle("SubStudio");
 
-    // toolbar
+    // toolbar: Open + Save
     QToolBar *tb = addToolBar(tr("Main"));
     tb->addAction(openAction_);
+    tb->addAction(saveAction_);
 
-    // model + view
+    // central widget with vertical layout: editor (fixed height) above table
+    QWidget *central = new QWidget(this);
+    QVBoxLayout *vlay = new QVBoxLayout(central);
+    vlay->setContentsMargins(4,4,4,4);
+    vlay->setSpacing(6);
+
+    // editor: fixed height 141 px, full width
+    editor_ = new QTextEdit(central);
+    editor_->setFixedHeight(141); // requested fixed height
+    editor_->setAcceptRichText(false); // plain text
+    vlay->addWidget(editor_);
+
+    // connect editor changes to update model immediately
+    connect(editor_, &QTextEdit::textChanged, this, &MainWindow::onEditorTextChanged);
+
+    // table
     model_ = new SubtitleModel(this);
-    tableView_ = new QTableView(this);
+    tableView_ = new QTableView(central);
     tableView_->setModel(model_);
 
     // hide the default vertical row header (we use our own '#' column)
@@ -54,12 +84,17 @@ void MainWindow::setupUi() {
     tableView_->setAlternatingRowColors(true);
     tableView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-    // enable custom context menu on header
+    // header context menu
     tableView_->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(tableView_->horizontalHeader(), &QHeaderView::customContextMenuRequested,
             this, &MainWindow::onHeaderContextMenuRequested);
 
-    setCentralWidget(tableView_);
+    vlay->addWidget(tableView_);
+    setCentralWidget(central);
+
+    // selection -> when user selects a row, show text in editor
+    connect(tableView_->selectionModel(), &QItemSelectionModel::currentRowChanged,
+            this, &MainWindow::onSelectionChanged);
 
     QStatusBar *s = statusBar();
     s->showMessage(tr("Ready"));
@@ -73,16 +108,75 @@ void MainWindow::onOpenFile() {
     if (!ok) {
         statusBar()->showMessage(tr("Failed to load file"));
     } else {
+        currentFilePath_ = path;
         statusBar()->showMessage(tr("Loaded: %1").arg(path));
         tableView_->resizeColumnsToContents();
+        // clear editor
+        editor_->clear();
     }
+}
+
+void MainWindow::onSelectionChanged(const QModelIndex &current, const QModelIndex & /*previous*/) {
+    if (!current.isValid()) {
+        editor_->blockSignals(true);
+        editor_->clear();
+        editor_->blockSignals(false);
+        return;
+    }
+    const int row = current.row();
+    const QVariant v = model_->data(model_->index(row, SubtitleModel::Text), Qt::DisplayRole);
+
+    // Block signals so setPlainText does NOT call onEditorTextChanged
+    editor_->blockSignals(true);
+    editor_->setPlainText(v.toString());
+    editor_->blockSignals(false);
+}
+
+void MainWindow::onSave() {
+    if (currentFilePath_.isEmpty()) {
+        // if we don't have a path, do Save As
+        onSaveAs();
+        return;
+    }
+
+    if (model_->saveSrt(currentFilePath_)) {
+        statusBar()->showMessage(tr("Saved: %1").arg(currentFilePath_), 3000);
+    } else {
+        statusBar()->showMessage(tr("Failed to save file"), 3000);
+    }
+}
+
+void MainWindow::onSaveAs() {
+    const QString path = QFileDialog::getSaveFileName(this, tr("Save subtitle as"), QString(),
+                                                      tr("SubRip files (*.srt);;All files (*.*)"));
+    if (path.isEmpty()) return;
+    if (model_->saveSrt(path)) {
+        currentFilePath_ = path;
+        statusBar()->showMessage(tr("Saved: %1").arg(path));
+    } else {
+        statusBar()->showMessage(tr("Failed to save file"));
+    }
+}
+
+void MainWindow::onEditorTextChanged() {
+    // get currently selected row
+    const QModelIndex current = tableView_->selectionModel()->currentIndex();
+    if (!current.isValid()) return;
+
+    const int row = current.row();
+    const QString newText = editor_->toPlainText();
+
+    // update model immediately (this updates Text and CPS columns and emits dataChanged)
+    model_->setTextAt(row, newText);
+
+    // optionally show a small status message
+    statusBar()->showMessage(tr("Edited row %1").arg(row + 1), 1500);
 }
 
 void MainWindow::onHeaderContextMenuRequested(const QPoint &pos) {
     QHeaderView *h = tableView_->horizontalHeader();
     QMenu menu(this);
 
-    // Build list of column names in sync with model
     const QStringList fullLabels = {
         "#",
         "Start Time",
@@ -99,9 +193,9 @@ void MainWindow::onHeaderContextMenuRequested(const QPoint &pos) {
         // Protect the Text column: never allow hiding it
         if (c == SubtitleModel::Text) {
             act->setChecked(true);
-            act->setEnabled(false); // no puede desmarcarse
+            act->setEnabled(false);
         } else {
-            act->setData(c); // store column index only for non-protected ones
+            act->setData(c);
             connect(act, &QAction::triggered, this, &MainWindow::toggleColumnVisible);
         }
         menu.addAction(act);
