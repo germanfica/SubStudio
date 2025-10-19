@@ -17,6 +17,9 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 #include <QSettings>
+#include <QCloseEvent>
+#include <QFileInfo>
+#include <QDir>
 
 class CPSDelegate : public QStyledItemDelegate {
 public:
@@ -32,7 +35,7 @@ public:
     }
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
-            const QModelIndex &index) const override
+               const QModelIndex &index) const override
     {
         if (option.state & QStyle::State_Selected) {
             QStyledItemDelegate::paint(painter, option, index);
@@ -62,7 +65,7 @@ public:
         double alpha = (double)(cps - warn + 1) / (double)(error - warn + 1);
         alpha = std::clamp(alpha, 0.0, 1.0);
 
-        // --- CORRECCIÓN AQUÍ ---
+        // background base (considera alternate rows)
         QColor baseBg = option.palette.color(QPalette::Base);
         if (option.features.testFlag(QStyleOptionViewItem::Alternate))
             baseBg = option.palette.color(QPalette::AlternateBase);
@@ -91,8 +94,39 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setupUi();
 }
 
+void MainWindow::updateWindowTitle() {
+    const QString appSuffix = QStringLiteral(" - SubStudio 0.1.0");
+    QString name;
+    if (!currentFilePath_.isEmpty()) {
+        QFileInfo fi(currentFilePath_);
+        name = fi.fileName();
+    } else {
+        name = QStringLiteral("Untitled");
+    }
+    QString prefix = dirty_ ? QStringLiteral("* ") : QString();
+    setWindowTitle(prefix + name + appSuffix);
+}
+
+bool MainWindow::saveFile() {
+    // si no hay path, pedimos Save As
+    if (currentFilePath_.isEmpty()) {
+        onSaveAs();
+        // onSaveAs seteara currentFilePath_ si el usuario guardo
+        if (currentFilePath_.isEmpty()) return false; // usuario canceló Save As
+    }
+    if (model_->saveSrt(currentFilePath_)) {
+        dirty_ = false;
+        statusBar()->showMessage(tr("Saved: %1").arg(currentFilePath_), 3000);
+        updateWindowTitle();
+        return true;
+    } else {
+        statusBar()->showMessage(tr("Failed to save file"), 3000);
+        return false;
+    }
+}
+
 void MainWindow::setupActions() {
-    openAction_ = new QAction(tr("Open..."), this);
+    openAction_ = new QAction(tr("Open."), this);
     openAction_->setShortcut(QKeySequence::Open);
     connect(openAction_, &QAction::triggered, this, &MainWindow::onOpenFile);
 
@@ -100,7 +134,7 @@ void MainWindow::setupActions() {
     saveAction_->setShortcut(QKeySequence::Save);
     connect(saveAction_, &QAction::triggered, this, &MainWindow::onSave);
 
-    saveAsAction_ = new QAction(tr("Save As..."), this);
+    saveAsAction_ = new QAction(tr("Save As."), this);
     connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveAs);
 
     QMenu *fileMenu = menuBar()->addMenu(tr("File"));
@@ -112,7 +146,7 @@ void MainWindow::setupActions() {
 
 void MainWindow::setupUi() {
     resize(1000, 700);
-    setWindowTitle("SubStudio");
+    updateWindowTitle();
 
     // toolbar: Open + Save
     QToolBar *tb = addToolBar(tr("Main"));
@@ -181,10 +215,12 @@ void MainWindow::onOpenFile() {
         statusBar()->showMessage(tr("Failed to load file"));
     } else {
         currentFilePath_ = path;
+        dirty_ = false;
         statusBar()->showMessage(tr("Loaded: %1").arg(path));
         tableView_->resizeColumnsToContents();
         // clear editor
         editor_->clear();
+        updateWindowTitle();
     }
 }
 
@@ -205,17 +241,7 @@ void MainWindow::onSelectionChanged(const QModelIndex &current, const QModelInde
 }
 
 void MainWindow::onSave() {
-    if (currentFilePath_.isEmpty()) {
-        // if we don't have a path, do Save As
-        onSaveAs();
-        return;
-    }
-
-    if (model_->saveSrt(currentFilePath_)) {
-        statusBar()->showMessage(tr("Saved: %1").arg(currentFilePath_), 3000);
-    } else {
-        statusBar()->showMessage(tr("Failed to save file"), 3000);
-    }
+    saveFile();
 }
 
 void MainWindow::onSaveAs() {
@@ -224,7 +250,9 @@ void MainWindow::onSaveAs() {
     if (path.isEmpty()) return;
     if (model_->saveSrt(path)) {
         currentFilePath_ = path;
+        dirty_ = false;
         statusBar()->showMessage(tr("Saved: %1").arg(path));
+        updateWindowTitle();
     } else {
         statusBar()->showMessage(tr("Failed to save file"));
     }
@@ -240,6 +268,12 @@ void MainWindow::onEditorTextChanged() {
 
     // update model immediately (this updates Text and CPS columns and emits dataChanged)
     model_->setTextAt(row, newText);
+
+    // marcar como cambios sin guardar y actualizar title
+    if (!dirty_) {
+        dirty_ = true;
+        updateWindowTitle();
+    }
 
     // optionally show a small status message
     statusBar()->showMessage(tr("Edited row %1").arg(row + 1), 1500);
@@ -282,4 +316,34 @@ void MainWindow::toggleColumnVisible() {
     int col = act->data().toInt();
     bool visible = act->isChecked();
     tableView_->setColumnHidden(col, !visible);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    if (!dirty_) {
+        event->accept();
+        return;
+    }
+
+    // Preguntar: Yes / No / Cancel (Yes por defecto)
+    QMessageBox msg(this);
+    msg.setIcon(QMessageBox::Warning);
+    msg.setWindowTitle(QStringLiteral("Unsaved changes"));
+    const QString pathToShow = currentFilePath_.isEmpty() ? QStringLiteral("Untitled") : QDir::toNativeSeparators(currentFilePath_);
+    msg.setText(tr("Do you want to save changes to %1?").arg(pathToShow));
+    msg.setStandardButtons(QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+    msg.setDefaultButton(QMessageBox::Yes);
+
+    int ret = msg.exec();
+    if (ret == QMessageBox::Yes) {
+        // intentar guardar; si el guardado falla o usuario cancela SaveAs, NO cerramos
+        if (saveFile()) {
+            event->accept();
+        } else {
+            event->ignore();
+        }
+    } else if (ret == QMessageBox::No) {
+        event->accept();
+    } else { // Cancel
+        event->ignore();
+    }
 }

@@ -5,6 +5,7 @@ class QTableView;
 class QAction;
 class SubtitleModel;
 class QTextEdit;
+class QCloseEvent;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -25,6 +26,9 @@ private:
     void setupActions();
     void setupUi();
 
+    bool saveFile();
+    void updateWindowTitle();
+
     QTableView *tableView_ = nullptr;
     SubtitleModel *model_ = nullptr;
     QAction *openAction_ = nullptr;
@@ -32,4 +36,8 @@ private:
     QAction *saveAsAction_ = nullptr;
     QTextEdit *editor_ = nullptr;
     QString currentFilePath_;
+    bool dirty_ = false;             // flag 'unsaved changes'
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 };
