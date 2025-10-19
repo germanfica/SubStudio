@@ -6,17 +6,15 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# --- Qt meta-object system ---
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOGEN_BUILD_DIR "${CMAKE_BINARY_DIR}/cmake_autogen")
+# --- Find Qt modules ---
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
-# --- Find Qt6 Widgets ---
-find_package(Qt6 COMPONENTS Widgets REQUIRED)
+# --- Standard Qt project setup ---
+# This enables AUTOMOC, AUTOUIC, AUTORCC, and other default settings.
+qt_standard_project_setup()
 
 # --- Main executable ---
-add_executable(substudio WIN32
+qt_add_executable(substudio
     src/main.cpp
     src/mainwindow.cpp
     src/mainwindow.h
@@ -24,20 +22,13 @@ add_executable(substudio WIN32
     src/subtitlemodel.h
 )
 
-# --- Automatic Qt properties ---
-#set_target_properties(substudio PROPERTIES
-#    AUTOMOC ON
-#    AUTOUIC ON
-#    AUTORCC ON
-#)
-
-# --- Compiler options ---
-#target_compile_options(substudio PRIVATE
-#    $<$<CXX_COMPILER_ID:MSVC>:/std:c++23 /Zc:__cplusplus>
-#)
-
 # --- Link Qt libraries ---
 target_link_libraries(substudio PRIVATE Qt6::Widgets)
+
+# --- Platform-specific properties ---
+set_target_properties(substudio PROPERTIES
+    WIN32_EXECUTABLE ON
+)
 
 # --- Post-build step: run windeployqt automatically on Windows ---
 if (WIN32)
