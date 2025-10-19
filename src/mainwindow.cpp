@@ -14,6 +14,77 @@
 #include <QTextEdit>
 #include <QItemSelectionModel>
 #include <QMessageBox>
+#include <QStyledItemDelegate>
+#include <QPainter>
+#include <QSettings>
+
+class CPSDelegate : public QStyledItemDelegate {
+public:
+    explicit CPSDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    // Blends 'fg' over 'bg' according to alpha (alpha ∈ [0,1])
+    static QColor blend(const QColor &fg, const QColor &bg, double alpha) {
+        alpha = std::min(std::max(alpha, 0.0), 1.0);
+        int r = qRound(fg.red()   * alpha + bg.red()   * (1.0 - alpha));
+        int g = qRound(fg.green() * alpha + bg.green() * (1.0 - alpha));
+        int b = qRound(fg.blue()  * alpha + bg.blue()  * (1.0 - alpha));
+        return QColor(r, g, b);
+    }
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option,
+            const QModelIndex &index) const override
+    {
+        if (option.state & QStyle::State_Selected) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QVariant v = index.data(Qt::DisplayRole);
+        bool ok = false;
+        int cps = v.toInt(&ok);
+        if (!ok || cps <= 0) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QSettings s;
+        int warn = s.value("Subtitle/CPSWarning", 15).toInt();
+        int error = s.value("Subtitle/CPSError", 25).toInt();
+        QColor errorColor = s.value("Colour/CpsError", QColor(255,0,0)).value<QColor>();
+
+        if (error < warn) error = warn;
+
+        if (cps <= warn) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        double alpha = (double)(cps - warn + 1) / (double)(error - warn + 1);
+        alpha = std::clamp(alpha, 0.0, 1.0);
+
+        // --- CORRECCIÓN AQUÍ ---
+        QColor baseBg = option.palette.color(QPalette::Base);
+        if (option.features.testFlag(QStyleOptionViewItem::Alternate))
+            baseBg = option.palette.color(QPalette::AlternateBase);
+
+        QColor blendedBg = blend(errorColor, baseBg, alpha);
+
+        painter->save();
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(blendedBg);
+        QRect r = option.rect;
+        r.adjust(0, 1, 0, 0);
+        painter->drawRect(r);
+
+        QString text = index.data(Qt::DisplayRole).toString();
+        QColor origText = option.palette.color(QPalette::Text);
+        QColor textColor = blend(QColor(0,0,0), origText, alpha);
+
+        painter->setPen(textColor);
+        painter->drawText(option.rect, Qt::AlignCenter, text);
+        painter->restore();
+    }
+};
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setupActions();
@@ -67,6 +138,7 @@ void MainWindow::setupUi() {
     model_ = new SubtitleModel(this);
     tableView_ = new QTableView(central);
     tableView_->setModel(model_);
+    tableView_->setItemDelegateForColumn(SubtitleModel::CPS, new CPSDelegate(this));
 
     // hide the default vertical row header (we use our own '#' column)
     tableView_->verticalHeader()->setVisible(false);
