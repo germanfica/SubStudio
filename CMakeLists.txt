@@ -44,12 +44,12 @@ if (WIN32)
     )
 endif()
 
-# --- Set default startup project when opening the solution in Visual Studio ---
+# --- Visual Studio specific configuration ---
 if (MSVC AND CMAKE_GENERATOR MATCHES "Visual Studio")
     # Ensure 'substudio' is the default startup project
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT substudio)
-    # Set the debugger working directory to the project root
+    # Automatically set debugger working directory to the build config folder
     set_target_properties(substudio PROPERTIES
-        VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/$<CONFIG>"
     )
 endif()
