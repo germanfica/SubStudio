@@ -16,7 +16,15 @@ int SubtitleModel::columnCount(const QModelIndex & /*parent*/) const {
 }
 
 QVariant SubtitleModel::data(const QModelIndex &index, int role) const {
-    if (!index.isValid() || role != Qt::DisplayRole) return {};
+    if (!index.isValid()) return {};
+
+    // Always center CPS column
+    if (role == Qt::TextAlignmentRole) {
+        if (index.column() == CPS) return QVariant(Qt::AlignCenter);
+        return QVariant();
+    }
+
+    if (role != Qt::DisplayRole) return {};
     const SubtitleEntry &e = entries_.at(index.row());
     switch (index.column()) {
         case LineNumber: return e.lineNumber;
