@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22
+  },
+  "configurePresets": [
+    {
+      "name": "msvc2022",
+      "displayName": "MSVC 2022 + wxWidgets 3.3.x",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build_msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "C:/wxWidgets-3.2.8",
+        "wxBUILD_SHARED": "ON"
+      }
+    },
+    {
+      "name": "ninja",
+      "displayName": "Ninja + wxWidgets 3.3.x",
+      "generator": "Ninja",
+      "binaryDir": "build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ]
+}
