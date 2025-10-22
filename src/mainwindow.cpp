@@ -10,6 +10,7 @@
 #include <sstream>
 #include <wx/filename.h>
 #include <wx/event.h>
+#include <wx/scrolwin.h>
 
 // Event table
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
@@ -81,6 +82,8 @@ MainWindow::MainWindow()
     grid_ = new wxGrid(this, wxID_ANY);
     grid_->CreateGrid(0, 5);
     grid_->SetCellHighlightPenWidth(1);
+    grid_->SetRowLabelSize(0);
+    if (wxWindow* wrl = grid_->GetGridRowLabelWindow()) wrl->Hide();
 
     // --- colors ---
     if (wxWindow* w = grid_->GetGridColLabelWindow()) w->SetBackgroundColour(topBarCol);
@@ -664,8 +667,30 @@ void MainWindow::OnGridRangeSelect(wxGridRangeSelectEvent& ev)
     ev.Skip(); // dejamos que wx haga la selecci�n visual del rango
 }
 
+// helper: devuelve coordenadas (x,y) relativas al GridWindow ya "des-scrolleadas"
+// helper: devuelve coordenadas (x,y) relativas al GridWindow ya "des-scrolleadas"
+#include <wx/scrolwin.h> // <- asegúrate de esto al principio del archivo
+
+// helper: devuelve coordenadas (x,y) relativas al GridWindow ya "des-scrolleadas"
+// helper simple: si hay evento usa su posición, si no usa screen->client
+static wxPoint GetMousePosSimple(wxGrid* grid, const wxMouseEvent* ev = nullptr)
+{
+    wxWindow* gw = grid->GetGridWindow();
+    if (!gw) return wxPoint(-1, -1);
+
+    if (ev) {
+        // ev->GetPosition() ya es relativo al GridWindow (cliente)
+        return ev->GetPosition();
+    }
+
+    // fallback: posición global del cursor convertida a coords cliente
+    return gw->ScreenToClient(wxGetMousePosition());
+}
+
+
+
+
 // empieza el "pintado" al presionar bot�n izquierdo
-// empieza el "pintado" al presionar boton izquierdo
 void MainWindow::OnGridMouseLeftDown(wxMouseEvent& ev)
 {
     mousePainting_ = true;
@@ -676,22 +701,19 @@ void MainWindow::OnGridMouseLeftDown(wxMouseEvent& ev)
 
     if (!gw->HasCapture()) gw->CaptureMouse();
 
-    wxPoint p = ev.GetPosition(); // relativo al grid window
+    wxPoint p = GetMousePosSimple(grid_);
     wxGridCellCoords coords = grid_->XYToCell(p.x, p.y);
     int row = coords.GetRow();
     int col = coords.GetCol();
 
     if (!(row >= 0 && col >= 0 && row < grid_->GetNumberRows() && col < grid_->GetNumberCols())) {
-        // celda inválida -> no iniciamos painting
         paintStartRow_ = paintStartCol_ = -1;
         return;
     }
 
-    // iniciamos el rango desde la fila en la que tocamos
     paintStartRow_ = row;
-    paintStartCol_ = col; // guardamos la columna inicial por si querés usarla luego
+    paintStartCol_ = col;
 
-    // seleccionar el bloque inicial (start..start), usaremos columnas visibles
     int ncols = grid_->GetNumberCols();
     int firstVisible = 0, lastVisible = ncols - 1;
     bool found = false;
@@ -706,7 +728,7 @@ void MainWindow::OnGridMouseLeftDown(wxMouseEvent& ev)
     else { firstVisible = 0; lastVisible = ncols - 1; }
 
     suspendGridSelectionHandlers_ = true;
-    grid_->SelectBlock(row, firstVisible, row, lastVisible); // selecciona la fila completa (visibles)
+    grid_->SelectBlock(row, firstVisible, row, lastVisible);
     grid_->SetGridCursor(row, col);
     grid_->MakeCellVisible(row, col);
     grid_->SetFocus();
@@ -720,7 +742,7 @@ void MainWindow::OnGridMouseLeftDown(wxMouseEvent& ev)
 }
 
 
-// terminar el "pintado" al soltar el bot�n
+
 // terminar el "pintado" al soltar el boton
 void MainWindow::OnGridMouseLeftUp(wxMouseEvent& ev)
 {
@@ -729,13 +751,14 @@ void MainWindow::OnGridMouseLeftUp(wxMouseEvent& ev)
     wxWindow* gw = grid_->GetGridWindow();
     if (gw && gw->HasCapture()) gw->ReleaseMouse();
 
-    wxPoint p = ev.GetPosition();
+    if (!gw) return;
+
+    wxPoint p = GetMousePosSimple(grid_);
     wxGridCellCoords coords = grid_->XYToCell(p.x, p.y);
     int row = coords.GetRow();
     int col = coords.GetCol();
 
     if (row >= 0 && col >= 0 && row < grid_->GetNumberRows() && col < grid_->GetNumberCols()) {
-        // determinamos columnas visibles
         int ncols = grid_->GetNumberCols();
         int firstVisible = 0, lastVisible = ncols - 1;
         bool found = false;
@@ -769,7 +792,6 @@ void MainWindow::OnGridMouseLeftUp(wxMouseEvent& ev)
         lastPaintCol_ = col;
     }
 
-    // reseteamos la fila de inicio
     paintStartRow_ = paintStartCol_ = -1;
 }
 
@@ -781,20 +803,21 @@ void MainWindow::OnGridMouseMotion(wxMouseEvent& ev)
         return;
     }
 
-    wxPoint p = ev.GetPosition();
+    wxWindow* gw = grid_->GetGridWindow();
+    if (!gw) { ev.Skip(); return; }
+
+    wxPoint p = GetMousePosSimple(grid_);
     wxGridCellCoords coords = grid_->XYToCell(p.x, p.y);
     int row = coords.GetRow();
     int col = coords.GetCol();
 
     if (!(row >= 0 && col >= 0 && row < grid_->GetNumberRows() && col < grid_->GetNumberCols())) {
-        // fuera de rango -> podrías implementar autoscroll aquí
+        // fuera de rango: podrías implementar autoscroll
         return;
     }
 
-    // si no cambió nada, evitamos trabajo
     if (row == lastPaintRow_ && col == lastPaintCol_) return;
 
-    // determinamos columnas visibles (primer y último índice mostrado)
     int ncols = grid_->GetNumberCols();
     int firstVisible = 0, lastVisible = ncols - 1;
     bool found = false;
@@ -806,11 +829,8 @@ void MainWindow::OnGridMouseMotion(wxMouseEvent& ev)
             if (grid_->IsColShown(c)) { lastVisible = c; break; }
         }
     }
-    else {
-        firstVisible = 0; lastVisible = ncols - 1;
-    }
+    else { firstVisible = 0; lastVisible = ncols - 1; }
 
-    // si tenemos fila de inicio válida, seleccionamos el bloque desde start hasta row
     int top = row, bottom = row;
     if (paintStartRow_ >= 0) {
         top = std::min(paintStartRow_, row);
@@ -819,16 +839,13 @@ void MainWindow::OnGridMouseMotion(wxMouseEvent& ev)
 
     suspendGridSelectionHandlers_ = true;
     grid_->SelectBlock(top, firstVisible, bottom, lastVisible);
-    // pero el cursor sigue la celda bajo el mouse (permite movimiento lateral)
     grid_->SetGridCursor(row, col);
     grid_->MakeCellVisible(row, col);
     grid_->SetFocus();
     suspendGridSelectionHandlers_ = false;
 
-    if (top < static_cast<int>(model_.size()) && editor_) {
-        // mostramos el texto de la fila superior del bloque (podés cambiar a otra fila si querés)
+    if (top < static_cast<int>(model_.size()) && editor_)
         editor_->ChangeValue(model_.at(top).text);
-    }
 
     lastPaintRow_ = row;
     lastPaintCol_ = col;
