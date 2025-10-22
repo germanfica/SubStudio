@@ -7,13 +7,18 @@
   "configurePresets": [
     {
       "name": "msvc2022",
-      "displayName": "MSVC 2022 + wxWidgets 3.3.x",
+      "displayName": "MSVC 2022 + wxWidgets 3.2.8",
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "build_msvc",
+      "binaryDir": "${sourceDir}/build_msvc",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_PREFIX_PATH": "C:/wxWidgets-3.2.8",
         "wxBUILD_SHARED": "ON"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": [ "Windows" ]
+        }
       }
     },
     {
