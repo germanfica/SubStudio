@@ -20,15 +20,24 @@ endif()
 find_package(wxWidgets REQUIRED COMPONENTS core base adv)
 
 # --- Define executable ---
-add_executable(substudio
-  src/main.cpp
-  src/mainwindow.cpp
-  src/mainwindow.h
-  src/subtitlemodel.cpp
-  src/subtitlemodel.h
-  src/cpsrenderer.cpp
-  src/cpsrenderer.h
+#add_executable(substudio
+#  src/main.cpp
+#  src/mainwindow.cpp
+#  src/mainwindow.h
+#  src/subtitlemodel.cpp
+#  src/subtitlemodel.h
+#  src/cpsrenderer.cpp
+#  src/cpsrenderer.h
+#)
+
+# --- Automatically collect all sources in /src ---
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
+
+# --- Define executable ---
+add_executable(substudio ${SOURCES})
 
 # --- Link wxWidgets ---
 include(${wxWidgets_USE_FILE})
