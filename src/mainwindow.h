@@ -7,7 +7,7 @@
 #endif
 
 #include <wx/wx.h>
-//#include <wx/grid.h>
+#include <wx/grid.h>
 //#include "substudiogrid.h" // no hay dependencia circular, asi que se puede usar sin problema
 #include <vector>
 
