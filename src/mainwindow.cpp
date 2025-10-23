@@ -11,6 +11,7 @@
 #include <wx/filename.h>
 #include <wx/event.h>
 #include <wx/scrolwin.h>
+#include "substudiogrid.h"
 #include <algorithm>
 
 // Event table
