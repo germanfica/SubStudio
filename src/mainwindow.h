@@ -8,11 +8,11 @@
 
 #include <wx/wx.h>
 //#include <wx/grid.h>
-#include "substudiogrid.h" // no hay dependencia circular, asi que se puede usar sin problema
+//#include "substudiogrid.h" // no hay dependencia circular, asi que se puede usar sin problema
 #include <vector>
 
 // >>> IMPORTANTE: forward declaration de la clase derivada <<<
-//class SubstudioGrid;
+class SubstudioGrid;
 
 struct SubtitleEntry {
     int lineNumber = 0;
