@@ -1,8 +1,18 @@
+// src/mainwindow.h
 #pragma once
 
+// Evitar macros min/max de Windows que rompen std::min/std::max
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <wx/wx.h>
-#include <wx/grid.h>
+//#include <wx/grid.h>
+#include "substudiogrid.h" // no hay dependencia circular, asi que se puede usar sin problema
 #include <vector>
+
+// >>> IMPORTANTE: forward declaration de la clase derivada <<<
+//class SubstudioGrid;
 
 struct SubtitleEntry {
     int lineNumber = 0;
@@ -22,7 +32,7 @@ public:
 
 private:
     // UI
-    wxGrid* grid_ = nullptr;
+    SubstudioGrid* grid_ = nullptr;   // ahora el compilador ya conoce el tipo
     wxTextCtrl* editor_ = nullptr;
     wxToolBar* toolbar_ = nullptr;
     CpsRenderer* renderer_ = nullptr;
@@ -48,7 +58,7 @@ private:
     bool PromptSaveIfDirty();
     bool DoSave();
     bool OnSaveAsInternal();
-    void TriggerSizeHandler(); // <-- nuevo helper para evitar temporales
+    void TriggerSizeHandler();
     bool suspendGridSelectionHandlers_ = false;
     bool mousePainting_ = false;
     int lastPaintRow_ = -1;

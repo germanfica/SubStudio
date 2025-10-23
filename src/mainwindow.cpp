@@ -11,6 +11,7 @@
 #include <wx/filename.h>
 #include <wx/event.h>
 #include <wx/scrolwin.h>
+#include <algorithm>
 
 // Event table
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
@@ -79,35 +80,37 @@ MainWindow::MainWindow()
     topSizer->Add(editor_, 0, wxEXPAND, 0);
 
     // Grid: 5 columns (Line, Start, End, CPS, Text)
-    grid_ = new wxGrid(this, wxID_ANY);
-    grid_->CreateGrid(0, 5);
+    //grid_ = new wxGrid(this, wxID_ANY);
+    grid_ = new SubstudioGrid(this, wxID_ANY);
+    //grid_->CreateGrid(0, 5);
     grid_->SetCellHighlightPenWidth(1);
     grid_->SetRowLabelSize(0);
+    grid_->BindExternalEditor(editor_);
     if (wxWindow* wrl = grid_->GetGridRowLabelWindow()) wrl->Hide();
 
     // --- colors ---
-    if (wxWindow* w = grid_->GetGridColLabelWindow()) w->SetBackgroundColour(topBarCol);
-    if (wxWindow* w = grid_->GetGridRowLabelWindow()) w->SetBackgroundColour(rowLabelCol);
+    //if (wxWindow* w = grid_->GetGridColLabelWindow()) w->SetBackgroundColour(topBarCol);
+    //if (wxWindow* w = grid_->GetGridRowLabelWindow()) w->SetBackgroundColour(rowLabelCol);
 
-    grid_->SetSelectionBackground(selBgCol);
-    grid_->SetSelectionForeground(*wxBLACK);
+    //grid_->SetSelectionBackground(selBgCol);
+    //grid_->SetSelectionForeground(*wxBLACK);
 
     // Set column labels
-    grid_->SetMargins(0, 0);
-    for (int c = 0; c < 5; ++c) {
-        if (c == 3) {
-            grid_->SetColLabelValue(c, "Characters Per Second");
-        }
-        else {
-            grid_->SetColLabelValue(c, COL_LABELS[c]);
-        }
-    }
+    //grid_->SetMargins(0, 0);
+    //for (int c = 0; c < 5; ++c) {
+    //    if (c == 3) {
+    //        grid_->SetColLabelValue(c, "Characters Per Second");
+    //    }
+    //    else {
+    //        grid_->SetColLabelValue(c, COL_LABELS[c]);
+    //    }
+    //}
 
-    grid_->SetColLabelValue(0, "#");
-    grid_->SetColLabelValue(1, "Start");
-    grid_->SetColLabelValue(2, "End");
-    grid_->SetColLabelValue(3, "CPS");
-    grid_->SetColLabelValue(4, "Text");
+    //grid_->SetColLabelValue(0, "#");
+    //grid_->SetColLabelValue(1, "Start");
+    //grid_->SetColLabelValue(2, "End");
+    //grid_->SetColLabelValue(3, "CPS");
+    //grid_->SetColLabelValue(4, "Text");
 
     //grid_->SetColLabelAlignment(wxALIGN_LEFT, wxALIGN_CENTRE);
 
@@ -115,16 +118,17 @@ MainWindow::MainWindow()
     grid_->EnableEditing(false);
 
     // Selection mode
-    grid_->SetSelectionMode(wxGrid::wxGridSelectCells);
-    grid_->Bind(wxEVT_KEY_DOWN, &MainWindow::OnGridKeyDown, this);
-    grid_->Bind(wxEVT_GRID_CELL_LEFT_CLICK, &MainWindow::OnGridCellLeftClick, this);
-    grid_->Bind(wxEVT_GRID_LABEL_LEFT_CLICK, &MainWindow::OnGridLabelLeftClick, this);
-    grid_->Bind(wxEVT_GRID_RANGE_SELECT, &MainWindow::OnGridRangeSelect, this);
-    wxWindow* gridWin = grid_->GetGridWindow();
-    gridWin->Bind(wxEVT_LEFT_DOWN, &MainWindow::OnGridMouseLeftDown, this);
-    gridWin->Bind(wxEVT_LEFT_UP, &MainWindow::OnGridMouseLeftUp, this);
-    gridWin->Bind(wxEVT_MOTION, &MainWindow::OnGridMouseMotion, this);
-    gridWin->Bind(wxEVT_LEFT_DCLICK, &MainWindow::OnGridMouseLeftDClick, this);
+    //grid_->SetSelectionMode(wxGrid::wxGridSelectCells);
+    //grid_->Bind(wxEVT_KEY_DOWN, &MainWindow::OnGridKeyDown, this);
+    //grid_->Bind(wxEVT_GRID_CELL_LEFT_CLICK, &MainWindow::OnGridCellLeftClick, this);
+    //grid_->Bind(wxEVT_GRID_LABEL_LEFT_CLICK, &MainWindow::OnGridLabelLeftClick, this);
+    //grid_->Bind(wxEVT_GRID_RANGE_SELECT, &MainWindow::OnGridRangeSelect, this);
+    //wxWindow* gridWin = grid_->GetGridWindow();
+    //gridWin->Bind(wxEVT_LEFT_DOWN, &MainWindow::OnGridMouseLeftDown, this);
+    //gridWin->Bind(wxEVT_LEFT_UP, &MainWindow::OnGridMouseLeftUp, this);
+    //gridWin->Bind(wxEVT_MOTION, &MainWindow::OnGridMouseMotion, this);
+    //gridWin->Bind(wxEVT_LEFT_DCLICK, &MainWindow::OnGridMouseLeftDClick, this);
+    //editor_->Bind(wxEVT_TEXT, &MainWindow::OnEditorText, this);
 
     // Disable user resizing/moving of columns and rows
     grid_->EnableDragColSize(false);
@@ -134,9 +138,9 @@ MainWindow::MainWindow()
     // Prevent user from resizing labels area
     // wxWidgets 3.2.8: SetColMinimalWidth takes (col, width).
     // Set a minimum for each column (reasonable default).
-    const int minColWidth = 20;
-    for (int c = 0; c < grid_->GetNumberCols(); ++c)
-        grid_->SetColMinimalWidth(c, minColWidth);
+    //const int minColWidth = 20;
+    //for (int c = 0; c < grid_->GetNumberCols(); ++c)
+    //    grid_->SetColMinimalWidth(c, minColWidth);
 
     // Set default row height for all rows
     grid_->SetDefaultRowSize(18, true); // height, resize existing rows
@@ -160,10 +164,10 @@ MainWindow::MainWindow()
     UpdateWindowTitle();
 
     // initial column widths: set reasonable fixed widths for non-text columns
-    grid_->SetColSize(0, 40);   // '#'
-    grid_->SetColSize(1, 110);  // Start Time
-    grid_->SetColSize(2, 110);  // End Time
-    grid_->SetColSize(3, 90);   // CPS
+    //grid_->SetColSize(0, 40);   // '#'
+    //grid_->SetColSize(1, 110);  // Start Time
+    //grid_->SetColSize(2, 110);  // End Time
+    //grid_->SetColSize(3, 90);   // CPS
 
     // adjust text column to fill the remaining area
     Layout();
