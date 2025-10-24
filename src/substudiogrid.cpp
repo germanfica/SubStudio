@@ -6,11 +6,15 @@
 
 wxString SubstudioFormatTime(double seconds) {
     if (seconds < 0) seconds = 0;
-    int total = static_cast<int>(seconds * 100 + 0.5); // centésimas
-    int cs = total % 100;
-    int s = (total / 100) % 60;
-    int m = (total / 100) / 60; // minutos totales (pueden superar 59)
-    return wxString::Format("%d:%02d.%02d", m, s, cs);
+    // redondeo a centésimas
+    int total_cs = static_cast<int>(seconds * 100 + 0.5);
+    int cs = total_cs % 100;          // centésimas -> 'FF'
+    int total_s = total_cs / 100;     // segundos totales
+    int s = total_s % 60;
+    int total_m = total_s / 60;
+    int m = total_m % 60;
+    int h = total_m / 60;             // puede superar 99 si hace falta
+    return wxString::Format("%d:%02d:%02d:%02d", h, m, s, cs);
 }
 
 static bool ParseInt(const wxString& s, long& out) { return s.ToLong(&out); }
@@ -175,7 +179,7 @@ wxString SubstudioGridTable::GetTypeName(int, int col) {
     case COL_NUM:
     case COL_CPS:   return wxGRID_VALUE_NUMBER;
     case COL_START:
-    case COL_END:   return wxGRID_VALUE_FLOAT;
+    case COL_END:   return wxGRID_VALUE_STRING;
     case COL_TEXT:  return wxGRID_VALUE_STRING;
     default:        return wxGRID_VALUE_STRING;
     }
