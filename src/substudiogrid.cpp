@@ -1,6 +1,7 @@
 // src/substudiogrid.cpp
 #include "substudiogrid.h"
 #include "substudio_time.h"
+#include "substudio_textfmt.h"
 #include <wx/regex.h>
 
 // Config centralizados para UI
@@ -52,7 +53,7 @@ wxString SubstudioGridTable::GetValue(int row, int col) {
     case COL_START: return SubstudioFormatTime(r.start, kUiTimeFmt);
     case COL_END:   return SubstudioFormatTime(r.end, kUiTimeFmt);
     case COL_CPS:   return wxString::Format("%d", r.cps);
-    case COL_TEXT:  return r.text;
+    case COL_TEXT:  return SubstudioFormatGridText(r.text);
     default:        return wxEmptyString;
     }
 }
