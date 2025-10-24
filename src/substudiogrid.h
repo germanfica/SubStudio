@@ -7,6 +7,10 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+// ---- Helpers de tiempo (SUBSTUDIO)
+////#include "substudio_time.h"
+//enum class TimeFormat : int;
+//enum class TimeParseFlags : int;
 
 class wxTextCtrl;
 
@@ -28,10 +32,6 @@ enum SubstudioCol : int {
     COL_TEXT,
     COL_COUNT
 };
-
-// ---- Helpers de tiempo (SUBSTUDIO)
-wxString SubstudioFormatTime(double seconds);      // m:ss.ff (minutos totales)
-bool     SubstudioParseTime(const wxString& s, double& outSeconds);
 
 // ---- Proveedor de atributos con zebra striping y celdas RO por columna (SUBSTUDIO)
 class SubstudioAttrProvider : public wxGridCellAttrProvider {

@@ -1,91 +1,12 @@
 // src/substudiogrid.cpp
 #include "substudiogrid.h"
+#include "substudio_time.h"
 #include <wx/regex.h>
 
-// ---------- Helpers tiempo (SUBSTUDIO)
-
-wxString SubstudioFormatTime(double seconds) {
-    if (seconds < 0) seconds = 0;
-    // redondeo a centésimas
-    int total_cs = static_cast<int>(seconds * 100 + 0.5);
-    int cs = total_cs % 100;          // centésimas -> 'FF'
-    int total_s = total_cs / 100;     // segundos totales
-    int s = total_s % 60;
-    int total_m = total_s / 60;
-    int m = total_m % 60;
-    int h = total_m / 60;             // puede superar 99 si hace falta
-    return wxString::Format("%d:%02d:%02d:%02d", h, m, s, cs);
-}
-
-static bool ParseInt(const wxString& s, long& out) { return s.ToLong(&out); }
-
-bool SubstudioParseTime(const wxString& in, double& outSeconds) {
-    // Acepta: "hh:mm:ss,mmm" | "hh:mm:ss.mmm" | "m:ss.ff" | "ss.ff" | "m:ss" | "ss"
-    wxString s = in;
-    s.Trim(true).Trim(false);
-    if (s.empty()) { outSeconds = 0.0; return true; } // blanco => 0
-
-    // 1) hh:mm:ss,mmm o hh:mm:ss.mmm
-    {
-        wxRegEx re("^(\\d+):(\\d{1,2}):(\\d{1,2})(?:[\\.,](\\d{1,3}))?$");
-        if (re.Matches(s)) {
-            long h = 0, m = 0, sec = 0, ms = 0;
-            ParseInt(re.GetMatch(s, 1), h);
-            ParseInt(re.GetMatch(s, 2), m);
-            ParseInt(re.GetMatch(s, 3), sec);
-            if (re.GetMatchCount() >= 5 && re.GetMatch(s, 4).size() > 0) {
-                wxString msStr = re.GetMatch(s, 4);
-                while (msStr.length() > 3) msStr.RemoveLast(); // limitar a 3 dígitos
-                ParseInt(msStr, ms);
-            }
-            if (m >= 60) m = 59;
-            if (sec >= 60) sec = 59;
-            outSeconds = h * 3600.0 + m * 60.0 + sec + (ms / 1000.0);
-            return true;
-        }
-    }
-
-    // 2) m:ss.ff o m:ss
-    {
-        wxRegEx re("^(\\d+):(\\d{1,2})(?:[\\.,](\\d{1,3}))?$");
-        if (re.Matches(s)) {
-            long m = 0, sec = 0, frac = 0;
-            ParseInt(re.GetMatch(s, 1), m);
-            ParseInt(re.GetMatch(s, 2), sec);
-            double add = 0.0;
-            if (re.GetMatchCount() >= 4 && re.GetMatch(s, 3).size() > 0) {
-                wxString f = re.GetMatch(s, 3);
-                if (f.length() == 1) f += "0";
-                else if (f.length() > 2) f = f.Left(2); // centésimas
-                ParseInt(f, frac);
-                add = frac / 100.0;
-            }
-            if (sec >= 60) sec = 59;
-            outSeconds = m * 60.0 + sec + add;
-            return true;
-        }
-    }
-
-    // 3) ss.ff o ss
-    {
-        wxRegEx re("^(\\d+)(?:[\\.,](\\d{1,3}))?$");
-        if (re.Matches(s)) {
-            long sec = 0, frac = 0;
-            ParseInt(re.GetMatch(s, 1), sec);
-            double add = 0.0;
-            if (re.GetMatchCount() >= 3 && re.GetMatch(s, 2).size() > 0) {
-                wxString f = re.GetMatch(s, 2);
-                if (f.length() == 1) f += "0";
-                else if (f.length() > 2) f = f.Left(2);
-                ParseInt(f, frac);
-                add = frac / 100.0;
-            }
-            outSeconds = sec + add;
-            return true;
-        }
-    }
-
-    return false;
+// Config centralizados para UI
+namespace {
+    constexpr TimeFormat    kUiTimeFmt = TimeFormat::TF_FMT_HH_MM_SS_CS; // salida 'H:MM:SS:FF'
+    constexpr TimeParseFlags kUiParse = kDefaultParseFlags;
 }
 
 // ---------- SubstudioAttrProvider
@@ -114,7 +35,7 @@ wxGridCellAttr* SubstudioAttrProvider::GetAttr(int row, int col, wxGridCellAttr:
 // ---------- SubstudioGridTable
 
 SubstudioGridTable::SubstudioGridTable() : wxGridTableBase() {
-    // Arranca vacío; el dueño llama EnsureOneRowPresent() cuando corresponda.
+    // Arranca vacio
 }
 
 void SubstudioGridTable::ClearRow(SubstudioRow& r) {
@@ -128,8 +49,8 @@ wxString SubstudioGridTable::GetValue(int row, int col) {
     const auto& r = m_rows.at(row);
     switch (col) {
     case COL_NUM:   return wxString::Format("%d", r.index);
-    case COL_START: return SubstudioFormatTime(r.start);
-    case COL_END:   return SubstudioFormatTime(r.end);
+    case COL_START: return SubstudioFormatTime(r.start, kUiTimeFmt);
+    case COL_END:   return SubstudioFormatTime(r.end, kUiTimeFmt);
     case COL_CPS:   return wxString::Format("%d", r.cps);
     case COL_TEXT:  return r.text;
     default:        return wxEmptyString;
@@ -141,12 +62,12 @@ void SubstudioGridTable::SetValue(int row, int col, const wxString& value) {
     switch (col) {
     case COL_START: {
         double t;
-        if (SubstudioParseTime(value, t)) r.start = t; // blanco => 0
+        if (SubstudioParseTime(value, t, kUiParse)) r.start = t; // blanco => 0
         break;
     }
     case COL_END: {
         double t;
-        if (SubstudioParseTime(value, t)) r.end = t;   // blanco => 0
+        if (SubstudioParseTime(value, t, kUiParse)) r.end = t;   // blanco => 0
         break;
     }
     case COL_TEXT:
@@ -224,7 +145,7 @@ bool SubstudioGridTable::IsEmptyCell(int row, int col) {
 bool SubstudioGridTable::AppendRows(size_t numRows) {
     if (numRows == 0) return true;
     size_t old = m_rows.size();
-    m_rows.resize(old + numRows); // agrega filas default 0/0/0/""
+    m_rows.resize(old + numRows);
     Reindex();
     if (GetView()) {
         wxGridTableMessage msg(this, wxGRIDTABLE_NOTIFY_ROWS_APPENDED, static_cast<int>(numRows));
@@ -342,7 +263,7 @@ void SubstudioGrid::BindExternalEditor(wxTextCtrl* editor) {
 }
 
 void SubstudioGrid::ApplyBrandColors() {
-    // Colores de marca SUBSTUDIO
+    // Colores SUBSTUDIO
     const wxColour topBarCol(165, 207, 231); // #A5CFE7
     const wxColour rowLabelCol(196, 236, 201); // #C4ECC9
     const wxColour selBgCol(206, 255, 231); // #CEFFE7
@@ -416,7 +337,6 @@ void SubstudioGrid::OnRowSelected(wxGridEvent& e) {
     const int row = e.GetRow();
     if (row < 0 || row >= GetNumberRows()) { e.Skip(); return; }
 
-    // Llevar el texto de la fila seleccionada al editor
     m_syncGuard = true;
     m_externalEditor->ChangeValue(GetCellValue(row, COL_TEXT));
     m_syncGuard = false;
@@ -437,7 +357,7 @@ void SubstudioGrid::OnRangeSelected(wxGridRangeSelectEvent& e) {
 }
 
 void SubstudioGrid::OnEditorTyped(wxCommandEvent& WXUNUSED(e)) {
-    if (m_syncGuard) return; // cambios que acabamos de hacer
+    if (m_syncGuard) return;
     const int row = GetGridCursorRow();
     if (row < 0 || row >= GetNumberRows()) return;
 
