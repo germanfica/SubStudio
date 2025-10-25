@@ -75,18 +75,6 @@ private:
     void OnQuit(wxCommandEvent& evt);
     void OnAbout(wxCommandEvent& evt);
 
-    void OnGridLabelRightClick(wxGridEvent& ev);
-    void OnToggleColumn(wxCommandEvent& evt);
-    void OnGridSelectCell(wxGridEvent& ev);
-    void OnGridKeyDown(wxKeyEvent& ev);
-    void OnGridCellLeftClick(wxGridEvent& ev);
-    void OnGridLabelLeftClick(wxGridEvent& ev);
-    void OnGridRangeSelect(wxGridRangeSelectEvent& ev);
-    void OnGridMouseLeftDown(wxMouseEvent& ev);
-    void OnGridMouseLeftUp(wxMouseEvent& ev);
-    void OnGridMouseMotion(wxMouseEvent& ev);
-    void OnGridMouseLeftDClick(wxMouseEvent& ev);
-
     void OnEditorText(wxCommandEvent& evt);
     void OnSubstudioEditCommit(wxCommandEvent& evt);
 
