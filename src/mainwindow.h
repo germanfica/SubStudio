@@ -9,27 +9,19 @@
 #include <wx/wx.h>
 #include <wx/grid.h>
 //#include "substudiogrid.h" // no hay dependencia circular, asi que se puede usar sin problema
-#include <vector>
+
+#include "subtitle.h"
 
 // >>> IMPORTANTE: forward declaration de la clase derivada <<<
 class SubstudioGrid;
 class SubstudioEditBox;
-
-struct SubtitleEntry {
-    int lineNumber = 0;
-    wxString startTime;
-    wxString endTime;
-    int cps = 0;
-    wxString text;
-};
-
 class CpsRenderer; // forward
 
 class MainWindow : public wxFrame
 {
 public:
     MainWindow();
-    ~MainWindow();
+    ~MainWindow() override;
 
 private:
     // UI
@@ -39,10 +31,7 @@ private:
     wxToolBar* toolbar_ = nullptr;
     CpsRenderer* renderer_ = nullptr;
 
-    // Model
-    std::vector<SubtitleEntry> model_;
-    wxString currentFilePath_;
-    bool dirty_ = false;
+    Subtitle subtitle_;
 
     // IDs
     enum {
@@ -55,7 +44,7 @@ private:
     };
 
     // Helpers
-    void FillGridFromModel();
+    void FillGridFromSubtitle();
     void UpdateWindowTitle();
     bool PromptSaveIfDirty();
     bool DoSave();

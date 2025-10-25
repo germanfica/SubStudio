@@ -14,6 +14,7 @@
 #include "substudiogrid.h"
 #include <algorithm>
 #include "substudio_edit_box.h"
+#include "srt_io.h"
 
 // Event table
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
@@ -37,7 +38,7 @@ static const wxString COL_LABELS[] = {
 
 MainWindow::MainWindow()
     : wxFrame(nullptr, wxID_ANY, "SubStudio", wxDefaultPosition, wxSize(900, 693)),
-    dirty_(false), renderer_(nullptr)
+    renderer_(nullptr)
 {
     // --- Colors ---
     const wxColour topBarCol(165, 207, 231);   // #A5CFE7  -> header top bar
@@ -75,167 +76,78 @@ MainWindow::MainWindow()
     wxBoxSizer* topSizer = new wxBoxSizer(wxVERTICAL);
 
     // Grid: 5 columns (Line, Start, End, CPS, Text)
-    //grid_ = new wxGrid(this, wxID_ANY);
     grid_ = new SubstudioGrid(this, wxID_ANY);
-    //grid_->CreateGrid(0, 5);
     grid_->SetCellHighlightPenWidth(1);
     grid_->SetRowLabelSize(0);
 
-    // --- colors ---
-    //if (wxWindow* w = grid_->GetGridColLabelWindow()) w->SetBackgroundColour(topBarCol);
-    //if (wxWindow* w = grid_->GetGridRowLabelWindow()) w->SetBackgroundColour(rowLabelCol);
-
-    //grid_->SetSelectionBackground(selBgCol);
-    //grid_->SetSelectionForeground(*wxBLACK);
-
-    // Set column labels
-    //grid_->SetMargins(0, 0);
-    //for (int c = 0; c < 5; ++c) {
-    //    if (c == 3) {
-    //        grid_->SetColLabelValue(c, "Characters Per Second");
-    //    }
-    //    else {
-    //        grid_->SetColLabelValue(c, COL_LABELS[c]);
-    //    }
-    //}
-
-    //grid_->SetColLabelValue(0, "#");
-    //grid_->SetColLabelValue(1, "Start");
-    //grid_->SetColLabelValue(2, "End");
-    //grid_->SetColLabelValue(3, "CPS");
-    //grid_->SetColLabelValue(4, "Text");
-
-    //grid_->SetColLabelAlignment(wxALIGN_LEFT, wxALIGN_CENTRE);
-
-    // Prevent user from editing grid cells directly
+    // Prevent direct editing
     grid_->EnableEditing(false);
 
-    // Selection mode
-    //grid_->SetSelectionMode(wxGrid::wxGridSelectCells);
-    //grid_->Bind(wxEVT_KEY_DOWN, &MainWindow::OnGridKeyDown, this);
-    //grid_->Bind(wxEVT_GRID_CELL_LEFT_CLICK, &MainWindow::OnGridCellLeftClick, this);
-    //grid_->Bind(wxEVT_GRID_LABEL_LEFT_CLICK, &MainWindow::OnGridLabelLeftClick, this);
-    //grid_->Bind(wxEVT_GRID_RANGE_SELECT, &MainWindow::OnGridRangeSelect, this);
-    //wxWindow* gridWin = grid_->GetGridWindow();
-    //gridWin->Bind(wxEVT_LEFT_DOWN, &MainWindow::OnGridMouseLeftDown, this);
-    //gridWin->Bind(wxEVT_LEFT_UP, &MainWindow::OnGridMouseLeftUp, this);
-    //gridWin->Bind(wxEVT_MOTION, &MainWindow::OnGridMouseMotion, this);
-    //gridWin->Bind(wxEVT_LEFT_DCLICK, &MainWindow::OnGridMouseLeftDClick, this);
-    //editor_->Bind(wxEVT_TEXT, &MainWindow::OnEditorText, this);
-
-    // Disable user resizing/moving of columns and rows
+    // Disable drag-to-resize and column/row moving
     grid_->EnableDragColSize(false);
     grid_->EnableDragRowSize(false);
     grid_->EnableDragColMove(false);
 
-    // Prevent user from resizing labels area
-    // wxWidgets 3.2.8: SetColMinimalWidth takes (col, width).
-    // Set a minimum for each column (reasonable default).
-    //const int minColWidth = 20;
-    //for (int c = 0; c < grid_->GetNumberCols(); ++c)
-    //    grid_->SetColMinimalWidth(c, minColWidth);
-
-    // Set default row height for all rows
-    grid_->SetDefaultRowSize(18, true); // height, resize existing rows
+    // Default row height
+    grid_->SetDefaultRowSize(18, true);
     if (wxWindow* wrl = grid_->GetGridRowLabelWindow()) wrl->Hide();
 
-    // Important: do NOT allow hiding of Text column via default actions.
-    // We'll provide a custom header-right-click menu to hide/show columns.
-
-    // --- Context para el SubstudioEditBox ---
+    // --- Context for SubstudioEditBox ---
     SubstudioContext ctx;
     ctx.grid = grid_;
 
-    // --- Context ---
+    // Notification of 'dirty' from the editor
     ctx.notify_dirty = [this]() {
-        if (!dirty_) {
-            dirty_ = true;
+        if (!subtitle_.dirty()) {
+            subtitle_.set_dirty(true);
             UpdateWindowTitle();
         }
-    };
+        };
 
-    // Editor - multiline text to edit selected subtitle text
-    // moved ABOVE the grid per request
-    //editor_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(-1, 120), wxTE_MULTILINE);
+    // Text editor above
     editBox_ = new SubstudioEditBox(this, ctx, wxID_ANY, wxDefaultPosition, wxSize(-1, 120));
-    // Mantener compatibilidad con código existente que usa editor_:
-    editor_ = editBox_->GetTextCtrl(); // suponemos este accessor en SubstudioEditBox
-
-    if(editor_) grid_->BindExternalEditor(editor_);
+    editor_ = editBox_->GetTextCtrl(); // accessor provided by SubstudioEditBox
+    if (editor_) grid_->BindExternalEditor(editor_);
     Bind(EVT_SUBSTUDIO_COMMIT_TEXT, &MainWindow::OnSubstudioEditCommit, this, editBox_->GetId());
 
     editBox_->SetMinSize(wxSize(-1, FromDIP(120)));
-    //topSizer->Add(editor_, 0, wxEXPAND, 0);
-    //topSizer->Add(editBox_, 0, wxEXPAND | wxALL, 0);
-    //topSizer->Add(editBox_, 0, wxEXPAND | wxALL, FromDIP(2));
     topSizer->Add(editBox_, 0, wxEXPAND, 0);
-    //topSizer->Add(grid_, 1, wxEXPAND | wxALL, FromDIP(2));
-    //topSizer->Add(grid_, 1, wxEXPAND | wxALL, 0);
     topSizer->Add(grid_, 1, wxEXPAND, 0);
 
     SetSizer(topSizer);
     SetClientSize(906, 693);
     CentreOnScreen();
 
+    // CPS renderer (if you implement CpsRenderer)
+    renderer_ = nullptr;
+    // example: wxGridCellAttr* attr = new wxGridCellAttr(); attr->SetRenderer(renderer_); grid_->SetColAttr(3, attr);
 
-    // Create renderer for CPS column (warn=40, error=60 as example)
-    renderer_ = nullptr; // si tenes CpsRenderer implementalo; lo dejamos null por compatibilidad
-    // si existiera: wxGridCellAttr* attr = new wxGridCellAttr(); attr->SetRenderer(renderer_); grid_->SetColAttr(3, attr);
-
-    // ensure model empty
-    model_.clear();
+    // Initial state
+    subtitle_.Clear();
     UpdateWindowTitle();
 
-    // initial column widths: set reasonable fixed widths for non-text columns
-    //grid_->SetColSize(0, 40);   // '#'
-    //grid_->SetColSize(1, 110);  // Start Time
-    //grid_->SetColSize(2, 110);  // End Time
-    //grid_->SetColSize(3, 90);   // CPS
-
-    // adjust text column to fill the remaining area
+    // Initial adjustment of the text column
     Layout();
     wxYieldIfNeeded();
-    // No temporales: usar helper que crea un wxSizeEvent nombrado
     TriggerSizeHandler();
 }
 
-// Handler para el evento de commit del SubstudioEditBox
+// Handler for SubstudioEditBox commit
 void MainWindow::OnSubstudioEditCommit(wxCommandEvent& evt)
 {
-    const int row = evt.GetInt();         // fila donde se hizo commit
+    const int row = evt.GetInt();         // row where the commit occurred
     const wxString newText = evt.GetString();
-
-    // Si la fila no existe en model_ la extendemos con valores razonables
     if (row < 0) return;
 
-    if (row >= static_cast<int>(model_.size())) {
-        // expandir model_ hasta row inclusive
-        int needed = row + 1;
-        int old = static_cast<int>(model_.size());
-        model_.resize(needed);
-        for (int r = old; r < needed; ++r) {
-            SubtitleEntry& e = model_[r];
-            e.lineNumber = r + 1;
-            e.startTime.clear();
-            e.endTime.clear();
-            e.cps = 0;
-            e.text.clear();
-        }
+    subtitle_.SetRowText(static_cast<size_t>(row), newText);
+
+    // Refresh grid if the row exists
+    if (grid_ && row < grid_->GetNumberRows()) {
+        grid_->SetCellValue(row, 4 /* Text */, newText);
     }
 
-    model_.at(row).text = newText;
-
-    // marcar dirty y actualizar UI
-    dirty_ = true;
     UpdateWindowTitle();
     SetStatusText(wxString::Format("Edited row %d", row + 1));
-
-    // También podemos refrescar la celda CPS/texto en el grid si necesitamos
-    if (grid_ && row < grid_->GetNumberRows()) {
-        grid_->SetCellValue(row, COL_TEXT, newText);
-        // si tienes lógica para recomputar CPS basada en start/end -> actualizar
-        // grid_->RefreshBlock(row, COL_CPS, row, COL_CPS);
-    }
 }
 
 MainWindow::~MainWindow()
@@ -246,9 +158,9 @@ MainWindow::~MainWindow()
     }
 }
 
-void MainWindow::FillGridFromModel()
+void MainWindow::FillGridFromSubtitle()
 {
-    suspendGridSelectionHandlers_ = true; // <-- prevenir handlers mientras rearmamos la grid
+    suspendGridSelectionHandlers_ = true;
 
     grid_->Freeze();
 
@@ -256,87 +168,73 @@ void MainWindow::FillGridFromModel()
     if (existing > 0)
         grid_->DeleteRows(0, existing);
 
-    int n = static_cast<int>(model_.size());
+    const auto& rows = subtitle_.entries();
+    int n = static_cast<int>(rows.size());
     if (n > 0)
         grid_->AppendRows(n);
 
     for (int r = 0; r < n; ++r) {
-        const SubtitleEntry& e = model_.at(r);
-        grid_->SetCellValue(r, 0, wxString::Format("%d", e.lineNumber));
-        grid_->SetCellValue(r, 1, e.startTime);
-        grid_->SetCellValue(r, 2, e.endTime);
+        const SubtitleEntry& e = rows[static_cast<size_t>(r)];
+        grid_->SetCellValue(r, 0, wxString::Format("%d", e.line_number));
+        grid_->SetCellValue(r, 1, e.start_time);
+        grid_->SetCellValue(r, 2, e.end_time);
         grid_->SetCellValue(r, 3, wxString::Format("%d", e.cps));
         grid_->SetCellValue(r, 4, e.text);
     }
 
-    // fixed widths for non-text columns
+    // Fixed widths for non-text columns
     grid_->SetColSize(0, 40);
     grid_->SetColSize(1, 110);
     grid_->SetColSize(2, 110);
     grid_->SetColSize(3, 90);
 
-    // Recompute text column width using helper (no temporales).
-    // Recompute text column width using helper (no temporales).
     TriggerSizeHandler();
 
     grid_->Thaw();
-    suspendGridSelectionHandlers_ = false; // <-- habilitar handlers otra vez
+    suspendGridSelectionHandlers_ = false;
     UpdateWindowTitle();
 
-    // --- Asegurarnos que el sizer item que contiene la grid no tenga bordes ni flags de margen ---
-    wxSizer* s = GetSizer();
-    if (s) {
+    // Ensure there are no extra borders/margins on the sizer item that contains the grid
+    if (wxSizer* s = GetSizer()) {
         wxSizerItemList& children = s->GetChildren();
-        for (wxSizerItemList::iterator it = children.begin(); it != children.end(); ++it) {
+        for (auto it = children.begin(); it != children.end(); ++it) {
             wxSizerItem* item = *it;
             if (!item) continue;
             if (item->GetWindow() == grid_) {
-                // quitar cualquier border residual
                 item->SetBorder(0);
-                // limpiar flags de borde (wxLEFT, wxRIGHT, wxTOP, wxBOTTOM, wxALL)
                 int flags = item->GetFlag();
                 flags &= ~(wxLEFT | wxRIGHT | wxTOP | wxBOTTOM | wxALL);
-                // asegurar wxEXPAND
                 flags |= wxEXPAND;
                 item->SetFlag(flags);
-                // quitar min-size por si acaso
                 item->SetMinSize(wxSize(-1, -1));
                 break;
             }
         }
-        // recalcular y aplicar layout final
-        // aplicar layout final de forma segura (NO usar RecalcSizes en debug)
         s->Layout();
-
-        // tambi�n asegurar que el padre del grid y el frame repinten su layout
         if (grid_->GetParent()) grid_->GetParent()->Layout();
         this->Layout();
-
     }
 
-    // Recalcular columna Text una vez que el layout final fue aplicado
     TriggerSizeHandler();
 
-    // refresh visual
     grid_->Refresh();
     grid_->Update();
-
 }
 
 void MainWindow::UpdateWindowTitle()
 {
-    wxString base = currentFilePath_.IsEmpty() ? wxString("Untitled") : wxFileName(currentFilePath_).GetFullName();
+    wxString base = subtitle_.path().IsEmpty() ? wxString("Untitled") : wxFileName(subtitle_.path()).GetFullName();
     wxString suffix = wxString(" - SubStudio 0.1.0");
-    wxString prefix = dirty_ ? wxString("*") : wxString("");
+    wxString prefix = subtitle_.dirty() ? wxString("*") : wxString("");
     wxString title = prefix + base + suffix;
     SetTitle(title);
 }
 
 bool MainWindow::PromptSaveIfDirty()
 {
-    if (!dirty_) return true;
+    if (!subtitle_.dirty()) return true;
 
-    wxString shown = currentFilePath_.IsEmpty() ? wxString("Untitled") : currentFilePath_;
+    wxString shown = subtitle_.path().IsEmpty() ? wxString("Untitled") : subtitle_.path();
     wxString question = wxString::Format("Do you want to save changes to %s?", shown.c_str());
 
     wxMessageDialog dlg(this,
@@ -358,25 +256,15 @@ bool MainWindow::PromptSaveIfDirty()
 
 bool MainWindow::DoSave()
 {
-    if (currentFilePath_.IsEmpty()) return OnSaveAsInternal();
+    if (subtitle_.path().IsEmpty()) return OnSaveAsInternal();
 
-    std::ostringstream out;
-    for (size_t i = 0; i < model_.size(); ++i) {
-        const SubtitleEntry& e = model_[i];
-        out << (i + 1) << "\n";
-        out << std::string(e.startTime.mb_str()) << " --> " << std::string(e.endTime.mb_str()) << "\n";
-        out << std::string(e.text.mb_str()) << "\n\n";
-    }
-
-    wxFFile f(currentFilePath_, "w");
-    if (!f.IsOpened()) {
-        wxMessageBox(wxString("Failed to open file for writing: ") + currentFilePath_, "Error", wxICON_ERROR);
+    subtitle_.ResequenceLineNumbers();
+    if (!srt::Save(subtitle_.path(), subtitle_.entries())) {
+        wxMessageBox(wxString("Failed to open file for writing: ") + subtitle_.path(), "Error", wxICON_ERROR);
         return false;
     }
-    f.Write(out.str());
-    f.Close();
 
-    dirty_ = false;
+    subtitle_.set_dirty(false);
     UpdateWindowTitle();
     SetStatusText("File saved");
     return true;
@@ -387,7 +275,7 @@ bool MainWindow::OnSaveAsInternal()
     wxFileDialog dlg(this, "Save subtitle file", "", "", "SubRip files (*.srt)|*.srt|All files (*.*)|*.*",
         wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     if (dlg.ShowModal() != wxID_OK) return false;
-    currentFilePath_ = dlg.GetPath();
+    subtitle_.set_path(dlg.GetPath());
     return DoSave();
 }
 
@@ -400,63 +288,18 @@ void MainWindow::OnOpen(wxCommandEvent& WXUNUSED(evt))
         wxFD_OPEN | wxFD_FILE_MUST_EXIST);
     if (dlg.ShowModal() != wxID_OK) return;
 
-    wxString path = dlg.GetPath();
-
-    wxTextFile tf;
-    if (!tf.Open(path)) {
-        wxMessageBox(wxString("Failed to open file: ") + path, "Error", wxICON_ERROR);
+    std::vector<SubtitleEntry> loaded;
+    if (!srt::Load(dlg.GetPath(), loaded)) {
+        wxMessageBox(wxString("Failed to open file: ") + dlg.GetPath(), "Error", wxICON_ERROR);
         return;
     }
 
-    model_.clear();
-    SubtitleEntry cur;
-    enum State { ExpectIndex, ExpectTime, ExpectText } state = ExpectIndex;
+    subtitle_.entries() = std::move(loaded);
+    subtitle_.set_path(dlg.GetPath());
+    subtitle_.set_dirty(false);
 
-    for (size_t i = 0; i < tf.GetLineCount(); ++i) {
-        wxString line = tf.GetLine(i);
-        line = line.Trim(false).Trim(true);
-
-        if (line.IsEmpty()) {
-            if (state == ExpectText) {
-                model_.push_back(cur);
-                cur = SubtitleEntry();
-                state = ExpectIndex;
-            }
-            continue;
-        }
-
-        if (state == ExpectIndex) {
-            state = ExpectTime;
-            continue;
-        }
-        else if (state == ExpectTime) {
-            wxString l = line;
-            wxString::size_type pos = l.find("-->");
-            if (pos != wxString::npos) {
-                wxString s1 = l.substr(0, pos).Trim(true).Trim(false);
-                wxString s2 = l.substr(pos + 3).Trim(true).Trim(false);
-                cur.startTime = s1;
-                cur.endTime = s2;
-            }
-            else {
-                cur.startTime = "";
-                cur.endTime = "";
-            }
-            state = ExpectText;
-        }
-        else if (state == ExpectText) {
-            if (!cur.text.IsEmpty()) cur.text += "\n";
-            cur.text += line;
-        }
-    }
-    if (!cur.text.IsEmpty() || !cur.startTime.IsEmpty() || !cur.endTime.IsEmpty()) {
-        model_.push_back(cur);
-    }
-
-    currentFilePath_ = path;
-    dirty_ = false;
-    FillGridFromModel();
-    SetStatusText("File loaded: " + currentFilePath_);
+    FillGridFromSubtitle();
+    SetStatusText("File loaded: " + subtitle_.path());
 }
 
 void MainWindow::OnSave(wxCommandEvent& WXUNUSED(evt))
@@ -482,15 +325,16 @@ void MainWindow::OnAbout(wxCommandEvent& WXUNUSED(evt))
 void MainWindow::OnEditorText(wxCommandEvent& WXUNUSED(ev))
 {
     int row = grid_->GetGridCursorRow();
-    if (row < 0 || row >= static_cast<int>(model_.size())) {
+    if (row < 0 || row >= static_cast<int>(subtitle_.entries().size())) {
         wxArrayInt rows = grid_->GetSelectedRows();
         if (!rows.empty()) row = rows[0];
         else return;
     }
 
     wxString newText = editor_->GetValue();
-    model_.at(row).text = newText;
-    dirty_ = true;
+    subtitle_.SetRowText(static_cast<size_t>(row), newText);
+    grid_->SetCellValue(row, 4 /* Text */, newText);
+
     UpdateWindowTitle();
     SetStatusText(wxString::Format("Edited row %d", row + 1));
 }
@@ -511,18 +355,18 @@ void MainWindow::OnSize(wxSizeEvent& evt)
         return;
     }
 
-    // Ensure sizers/layout updated first
+    // First update the layout
     Layout();
 
-    // Parent client width and grid X position: this avoids offsets por posicionamiento
+    // Parent client width and grid X position
     wxWindow* parent = grid_->GetParent();
     int parentClientW = parent ? parent->GetClientSize().GetWidth() : grid_->GetClientSize().GetWidth();
-    int gridX = grid_->GetPosition().x; // position inside parent
+    int gridX = grid_->GetPosition().x;
 
-    // Row label width (nros de fila)
+    // Width of row labels
     const int rowLabelW = grid_->GetRowLabelSize();
 
-    // Determine if vertical scrollbar visible and its width
+    // Vertical scrollbar
     int vScrollW = 0;
     {
         int totalRowsH = grid_->GetColLabelSize();
@@ -552,7 +396,6 @@ void MainWindow::OnSize(wxSizeEvent& evt)
         grid_->SetColSize(4, available);
     }
 
-    // ensure layout and repaint
     Layout();
     grid_->Refresh();
     grid_->Update();
