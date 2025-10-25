@@ -13,6 +13,7 @@
 #include <wx/scrolwin.h>
 #include "substudiogrid.h"
 #include <algorithm>
+#include "substudio_edit_box.h"
 
 // Event table
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
@@ -75,19 +76,12 @@ MainWindow::MainWindow()
     // --- Layout ---
     wxBoxSizer* topSizer = new wxBoxSizer(wxVERTICAL);
 
-    // Editor - multiline text to edit selected subtitle text
-    // moved ABOVE the grid per request
-    editor_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(-1, 120), wxTE_MULTILINE);
-    topSizer->Add(editor_, 0, wxEXPAND, 0);
-
     // Grid: 5 columns (Line, Start, End, CPS, Text)
     //grid_ = new wxGrid(this, wxID_ANY);
     grid_ = new SubstudioGrid(this, wxID_ANY);
     //grid_->CreateGrid(0, 5);
     grid_->SetCellHighlightPenWidth(1);
     grid_->SetRowLabelSize(0);
-    grid_->BindExternalEditor(editor_);
-    if (wxWindow* wrl = grid_->GetGridRowLabelWindow()) wrl->Hide();
 
     // --- colors ---
     //if (wxWindow* w = grid_->GetGridColLabelWindow()) w->SetBackgroundColour(topBarCol);
@@ -145,10 +139,40 @@ MainWindow::MainWindow()
 
     // Set default row height for all rows
     grid_->SetDefaultRowSize(18, true); // height, resize existing rows
+    if (wxWindow* wrl = grid_->GetGridRowLabelWindow()) wrl->Hide();
 
     // Important: do NOT allow hiding of Text column via default actions.
     // We'll provide a custom header-right-click menu to hide/show columns.
 
+    // --- Context para el SubstudioEditBox ---
+    SubstudioContext ctx;
+    ctx.grid = grid_;
+
+    // --- Context ---
+    ctx.notify_dirty = [this]() {
+        if (!dirty_) {
+            dirty_ = true;
+            UpdateWindowTitle();
+        }
+    };
+
+    // Editor - multiline text to edit selected subtitle text
+    // moved ABOVE the grid per request
+    //editor_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(-1, 120), wxTE_MULTILINE);
+    editBox_ = new SubstudioEditBox(this, ctx, wxID_ANY, wxDefaultPosition, wxSize(-1, 120));
+    // Mantener compatibilidad con código existente que usa editor_:
+    editor_ = editBox_->GetTextCtrl(); // suponemos este accessor en SubstudioEditBox
+
+    if(editor_) grid_->BindExternalEditor(editor_);
+    Bind(EVT_SUBSTUDIO_COMMIT_TEXT, &MainWindow::OnSubstudioEditCommit, this, editBox_->GetId());
+
+    editBox_->SetMinSize(wxSize(-1, FromDIP(120)));
+    //topSizer->Add(editor_, 0, wxEXPAND, 0);
+    //topSizer->Add(editBox_, 0, wxEXPAND | wxALL, 0);
+    //topSizer->Add(editBox_, 0, wxEXPAND | wxALL, FromDIP(2));
+    topSizer->Add(editBox_, 0, wxEXPAND, 0);
+    //topSizer->Add(grid_, 1, wxEXPAND | wxALL, FromDIP(2));
+    //topSizer->Add(grid_, 1, wxEXPAND | wxALL, 0);
     topSizer->Add(grid_, 1, wxEXPAND, 0);
 
     SetSizer(topSizer);
@@ -175,6 +199,45 @@ MainWindow::MainWindow()
     wxYieldIfNeeded();
     // No temporales: usar helper que crea un wxSizeEvent nombrado
     TriggerSizeHandler();
+}
+
+// Handler para el evento de commit del SubstudioEditBox
+void MainWindow::OnSubstudioEditCommit(wxCommandEvent& evt)
+{
+    const int row = evt.GetInt();         // fila donde se hizo commit
+    const wxString newText = evt.GetString();
+
+    // Si la fila no existe en model_ la extendemos con valores razonables
+    if (row < 0) return;
+
+    if (row >= static_cast<int>(model_.size())) {
+        // expandir model_ hasta row inclusive
+        int needed = row + 1;
+        int old = static_cast<int>(model_.size());
+        model_.resize(needed);
+        for (int r = old; r < needed; ++r) {
+            SubtitleEntry& e = model_[r];
+            e.lineNumber = r + 1;
+            e.startTime.clear();
+            e.endTime.clear();
+            e.cps = 0;
+            e.text.clear();
+        }
+    }
+
+    model_.at(row).text = newText;
+
+    // marcar dirty y actualizar UI
+    dirty_ = true;
+    UpdateWindowTitle();
+    SetStatusText(wxString::Format("Edited row %d", row + 1));
+
+    // También podemos refrescar la celda CPS/texto en el grid si necesitamos
+    if (grid_ && row < grid_->GetNumberRows()) {
+        grid_->SetCellValue(row, COL_TEXT, newText);
+        // si tienes lógica para recomputar CPS basada en start/end -> actualizar
+        // grid_->RefreshBlock(row, COL_CPS, row, COL_CPS);
+    }
 }
 
 MainWindow::~MainWindow()

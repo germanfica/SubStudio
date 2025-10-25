@@ -13,6 +13,7 @@
 
 // >>> IMPORTANTE: forward declaration de la clase derivada <<<
 class SubstudioGrid;
+class SubstudioEditBox;
 
 struct SubtitleEntry {
     int lineNumber = 0;
@@ -34,6 +35,7 @@ private:
     // UI
     SubstudioGrid* grid_ = nullptr;   // ahora el compilador ya conoce el tipo
     wxTextCtrl* editor_ = nullptr;
+    SubstudioEditBox* editBox_ = nullptr;
     wxToolBar* toolbar_ = nullptr;
     CpsRenderer* renderer_ = nullptr;
 
@@ -86,6 +88,8 @@ private:
     void OnGridMouseLeftDClick(wxMouseEvent& ev);
 
     void OnEditorText(wxCommandEvent& evt);
+    void OnSubstudioEditCommit(wxCommandEvent& evt);
+
     void OnClose(wxCloseEvent& evt);
     void OnSize(wxSizeEvent& evt);
 

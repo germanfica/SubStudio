@@ -357,11 +357,18 @@ void SubstudioGrid::OnRangeSelected(wxGridRangeSelectEvent& e) {
     e.Skip();
 }
 
-void SubstudioGrid::OnEditorTyped(wxCommandEvent& WXUNUSED(e)) {
-    if (m_syncGuard) return;
+void SubstudioGrid::OnEditorTyped(wxCommandEvent& e) {
+    // Si estamos en modo sync (cambios programaticos) no procesamos;
+    // permitimos que el evento siga su ruta por si alguien mas lo necesita.
+    if (m_syncGuard) { e.Skip(); return; }
+
     const int row = GetGridCursorRow();
-    if (row < 0 || row >= GetNumberRows()) return;
+    if (row < 0 || row >= GetNumberRows()) { e.Skip(); return; }
 
     // Volcar el contenido del editor a la grilla (dispara SetValue -> recalcula CPS)
     SetCellValue(row, COL_TEXT, m_externalEditor->GetValue());
+
+    // IMPORTANTE: permitir que el evento continue (MainWindow tiene EVT_TEXT)
+    // para que MainWindow::OnEditorText reciba la notificacion y ponga dirty_ = true.
+    e.Skip();
 }
