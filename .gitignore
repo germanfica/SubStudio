@@ -1,6 +1,7 @@
 build
 build_msvc
 output.txt
+CombineCplusplusFilesToOutput.ps1
 
 # CMake
 CMakeLists.txt.user
