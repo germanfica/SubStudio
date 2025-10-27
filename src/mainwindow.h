@@ -1,6 +1,9 @@
 // src/mainwindow.h
 #pragma once
 
+#ifndef SUBSTUDIO_MAINWINDOW_H_
+#define SUBSTUDIO_MAINWINDOW_H_
+
 // Evitar macros min/max de Windows que rompen std::min/std::max
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -8,67 +11,53 @@
 
 #include <wx/wx.h>
 #include <wx/grid.h>
-//#include "substudiogrid.h" // no hay dependencia circular, asi que se puede usar sin problema
+#include <memory>
 
 #include "subtitle.h"
+#include "main_menu.h"
+#include "main_toolbar.h"
+#include "grid_view.h"
 
 // >>> IMPORTANTE: forward declaration de la clase derivada <<<
-class SubstudioGrid;
-class SubstudioEditBox;
-class CpsRenderer; // forward
+class SubstudioGrid;       // provisto por el proyecto
+class SubstudioEditBox;    // provisto por el proyecto
 
-class MainWindow : public wxFrame
-{
+class MainWindow : public wxFrame {
 public:
     MainWindow();
     ~MainWindow() override;
 
 private:
     // UI
-    SubstudioGrid* grid_ = nullptr;   // ahora el compilador ya conoce el tipo
+    SubstudioGrid* grid_ = nullptr;
+    SubstudioEditBox* edit_box_ = nullptr;
     wxTextCtrl* editor_ = nullptr;
-    SubstudioEditBox* editBox_ = nullptr;
-    wxToolBar* toolbar_ = nullptr;
-    CpsRenderer* renderer_ = nullptr;
+    std::unique_ptr<MainMenu> menu_;
+    std::unique_ptr<MainToolbar> toolbar_;
+    std::unique_ptr<GridView> grid_view_;
 
-    Subtitle subtitle_;
-
-    // IDs
-    enum {
-        ID_Open = wxID_HIGHEST + 1,
-        ID_Save,
-        ID_SaveAs,
-        ID_ToggleColBase = 3000,
-        ID_ToolOpen,
-        ID_ToolSave
-    };
+    // Modelo
+    Subtitle doc_;
 
     // Helpers
-    void FillGridFromSubtitle();
     void UpdateWindowTitle();
     bool PromptSaveIfDirty();
     bool DoSave();
-    bool OnSaveAsInternal();
-    void TriggerSizeHandler();
-    bool suspendGridSelectionHandlers_ = false;
-    bool mousePainting_ = false;
-    int lastPaintRow_ = -1;
-    int lastPaintCol_ = -1;
-    int paintStartRow_ = -1;
-    int paintStartCol_ = -1;
+    bool DoSaveAs();
 
-    // Events
-    void OnOpen(wxCommandEvent& evt);
-    void OnSave(wxCommandEvent& evt);
-    void OnSaveAs(wxCommandEvent& evt);
-    void OnQuit(wxCommandEvent& evt);
-    void OnAbout(wxCommandEvent& evt);
+    // Acciones
+    void ActionOpen();
+    void ActionSave();
+    void ActionSaveAs();
+    void ActionExit();
+    void ActionAbout();
 
-    void OnEditorText(wxCommandEvent& evt);
-    void OnSubstudioEditCommit(wxCommandEvent& evt);
-
-    void OnClose(wxCloseEvent& evt);
-    void OnSize(wxSizeEvent& evt);
+    // Eventos
+    void OnEditorText(wxCommandEvent& ev);
+    void OnClose(wxCloseEvent& ev);
+    void OnSize(wxSizeEvent& ev);
 
     wxDECLARE_EVENT_TABLE();
 };
+
+#endif  // SUBSTUDIO_MAINWINDOW_H_
