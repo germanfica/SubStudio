@@ -38,16 +38,22 @@ MainMenu::MainMenu(wxFrame* frame, const MenuActions& actions)
 
 MainMenu::~MainMenu() {
     // No borramos ni gestionamos el wxMenuBar aquí: el wxFrame es el dueño.
-    // Dejamos el destructor por si en el futuro queremos anular bindings explícitos.
+    // No dejamos bindings que dependan de 'this' (los handlers están
+    // capturando 'actions_' por valor), así que no hace falta Unbind.
 }
 
-// Bind de handlers al frame (desacoplado del puntero al menu).
+// Bind de handlers al frame (capturamos una copia de actions_ para evitar
+// que los handlers dependan del 'this' de MainMenu).
 void MainMenu::BindHandlers() {
     if (!frame_) return;
 
-    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) { if (actions_.on_open) actions_.on_open(); }, wxID_OPEN);
-    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) { if (actions_.on_save) actions_.on_save(); }, wxID_SAVE);
-    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) { if (actions_.on_save_as) actions_.on_save_as(); }, wxID_SAVEAS);
-    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) { if (actions_.on_exit) actions_.on_exit(); }, wxID_EXIT);
-    frame_->Bind(wxEVT_MENU, [this](wxCommandEvent&) { if (actions_.on_about) actions_.on_about(); }, wxID_ABOUT);
+    // Copiamos actions_ localmente para las lambdas: así las funciones
+    // registradas en el frame no usarán 'this' ni members de MainMenu.
+    const MenuActions actions = actions_;
+
+    frame_->Bind(wxEVT_MENU, [actions](wxCommandEvent&) { if (actions.on_open)  actions.on_open(); }, wxID_OPEN);
+    frame_->Bind(wxEVT_MENU, [actions](wxCommandEvent&) { if (actions.on_save)  actions.on_save(); }, wxID_SAVE);
+    frame_->Bind(wxEVT_MENU, [actions](wxCommandEvent&) { if (actions.on_save_as)  actions.on_save_as(); }, wxID_SAVEAS);
+    frame_->Bind(wxEVT_MENU, [actions](wxCommandEvent&) { if (actions.on_exit)  actions.on_exit(); }, wxID_EXIT);
+    frame_->Bind(wxEVT_MENU, [actions](wxCommandEvent&) { if (actions.on_about)  actions.on_about(); }, wxID_ABOUT);
 }
