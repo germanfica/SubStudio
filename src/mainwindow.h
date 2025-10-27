@@ -37,7 +37,7 @@ private:
     std::unique_ptr<GridView> grid_view_;
 
     // Modelo
-    Subtitle doc_;
+    Subtitles doc_;
 
     // Helpers
     void UpdateWindowTitle();

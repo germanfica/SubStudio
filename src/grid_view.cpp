@@ -1,6 +1,7 @@
 #include "grid_view.h"
 
 #include <wx/settings.h>
+#include "substudio_time.h"
 
 GridView::GridView(wxGrid* grid) : grid_(grid) {
     grid_->EnableEditing(false);
@@ -23,9 +24,9 @@ void GridView::Populate(const std::vector<SubtitleEntry>& rows) {
     for (int r = 0; r < static_cast<int>(rows.size()); ++r) {
         const auto& e = rows[static_cast<size_t>(r)];
         grid_->SetCellValue(r, COL_LINE, wxString::Format("%d", e.line_number));
-        grid_->SetCellValue(r, COL_START, e.start_time);
-        grid_->SetCellValue(r, COL_END, e.end_time);
-        grid_->SetCellValue(r, COL_CPS, wxString::Format("%d", e.cps));
+        grid_->SetCellValue(r, COL_START, SubstudioFormatTime(e.start_time));
+        grid_->SetCellValue(r, COL_END, SubstudioFormatTime(e.end_time));
+        grid_->SetCellValue(r, COL_CPS, wxString::Format("%d", e.Cps()));
         grid_->SetCellValue(r, COL_TEXT, e.text);
     }
 
