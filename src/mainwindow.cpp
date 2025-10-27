@@ -5,10 +5,13 @@
 #include <wx/filedlg.h>
 #include <wx/msgdlg.h>
 #include <wx/filename.h>
+#include <wx/app.h>
 
 #include "srt_io.h"
 #include "substudiogrid.h"
 #include "substudio_edit_box.h"
+#include "substudio_time.h"
+#include "substudio_textfmt.h"
 
 // Tabla de eventos mínima (editor, close, size)
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
@@ -142,12 +145,53 @@ bool MainWindow::DoSaveAs() {
 
 bool MainWindow::DoSave() {
     if (doc_.path().IsEmpty()) return DoSaveAs();
-    doc_.ResequenceLineNumbers();
-    if (!srt::Save(doc_.path(), doc_.entries())) {
+
+    // 1) Asegurar que cualquier edicion pendiente del editor externo se vuelque a la grilla.
+    if (edit_box_) {
+        edit_box_->ForceCommit();  // vuelca sincronamente a la celda activa
+    }
+
+    // 2) Tomar un snapshot directo de la grilla (fuente de verdad de la UI)
+    //    para no depender de que 'doc_' este 100% sincronizado.
+    std::vector<SubtitleEntry> snapshot;
+    snapshot.reserve(grid_ ? grid_->GetNumberRows() : 0);
+
+    if (grid_) {
+        const int rows = grid_->GetNumberRows();
+        for (int r = 0; r < rows; ++r) {
+            SubtitleEntry e;
+            e.line_number = r + 1;
+
+            double t1 = 0.0, t2 = 0.0;
+            (void)SubstudioParseTime(grid_->GetCellValue(r, COL_START), t1);
+            (void)SubstudioParseTime(grid_->GetCellValue(r, COL_END), t2);
+            e.start_time = t1;
+            e.end_time = t2;
+
+            // El texto en la grilla viene formateado ("\\N" visible). Parsearlo a '\n' reales.
+            const wxString displayed = grid_->GetCellValue(r, COL_TEXT);
+            e.text = SubstudioParseGridText(displayed);
+
+            // Evitar persistir filas placeholder totalmente vacias (sin tiempo y sin texto)
+            wxString trimmed = e.text;
+            trimmed.Trim(true).Trim(false);
+            const bool emptyRow = trimmed.IsEmpty() && e.start_time <= 0.0 && e.end_time <= 0.0;
+            if (emptyRow) continue;
+
+            snapshot.push_back(std::move(e));
+        }
+    }
+
+    // 3) Guardar el snapshot al archivo SRT.
+    if (!srt::Save(doc_.path(), snapshot)) {
         wxMessageBox(wxString(wxS("Failed to open file for writing: ")) + doc_.path(),
             wxString(wxS("Error")), wxICON_ERROR);
         return false;
     }
+
+    // 4) Mantener el modelo en memoria sincronizado con lo que se guardo.
+    doc_.entries() = snapshot;
+    doc_.ResequenceLineNumbers();
     doc_.set_dirty(false);
     UpdateWindowTitle();
     SetStatusText(wxString(wxS("File saved")));
