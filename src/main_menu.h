@@ -1,3 +1,4 @@
+// src/main_menu.h
 #pragma once
 
 #ifndef SUBSTUDIO_UI_MAIN_MENU_H_
@@ -9,6 +10,7 @@
 #include <wx/menuitem.h>
 #include <wx/frame.h>
 
+// Callbacks para acciones del menu
 struct MenuActions {
     std::function<void()> on_open;
     std::function<void()> on_save;
@@ -17,18 +19,19 @@ struct MenuActions {
     std::function<void()> on_about;
 };
 
+// Clase que encapsula la creación y binding del menu.
+// Nota: MainMenu NO es dueño del wxMenuBar; el frame lo es tras SetMenuBar.
 class MainMenu {
 public:
     explicit MainMenu(wxFrame* frame, const MenuActions& actions);
-    ~MainMenu() = default;
+    ~MainMenu();
 
-    // Devuelve el wxMenuBar (no transfiere ownership)
-    wxMenuBar* bar() const { return bar_; }
+    // Devuelve el wxMenuBar actual asignado al frame (no transfiere ownership).
+    wxMenuBar* bar() const { return frame_ ? frame_->GetMenuBar() : nullptr; }
 
 private:
     wxFrame* frame_ = nullptr;
     MenuActions actions_;
-    wxMenuBar* bar_ = nullptr; // NO somos dueños: el frame se encarga de destruirlo
 
     void BindHandlers();
 };
