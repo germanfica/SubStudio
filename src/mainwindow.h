@@ -19,8 +19,8 @@
 #include "grid_view.h"
 
 // >>> IMPORTANTE: forward declaration de la clase derivada <<<
-class SubstudioGrid;       // provisto por el proyecto
-class SubstudioEditBox;    // provisto por el proyecto
+class SubstudioGrid;
+class SubstudioEditBox;
 
 class MainWindow : public wxFrame {
 public:
