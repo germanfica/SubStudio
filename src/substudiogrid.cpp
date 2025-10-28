@@ -199,21 +199,11 @@ void SubstudioGridTable::Reindex() {
 }
 
 int SubstudioGridTable::ComputeCps(const wxString& text, double start, double end) {
-    // Normalizar contrato: start/end en segundos
-    if (!(end > start)) return 0;
-
-    // Duracion en milisegundos redondeada (misma regla que SubtitleEntry::Cps)
-    const int duration_ms = static_cast<int>(std::lround((end - start) * 1000.0));
-    if (duration_ms <= 0) return 0;
-
-    // Duraciones muy cortas se consideran invalidas (<=100 ms)
-    if (duration_ms <= 100) return -1;
-
-    // Usar la misma logica de "visible length" que definiste en subtitle.h
-    const int chars = VisibleLenForCps(text);
-
-    // Division entera (truncamiento)
-    return (chars * 1000) / duration_ms;
+    SubtitleEntry tmp;
+    tmp.text = SubstudioParseGridText(text); // si el texto viene formateado en grid
+    tmp.start_time = start;
+    tmp.end_time = end;
+    return tmp.Cps();
 }
 
 void SubstudioGridTable::RecalcRow(int row) {
