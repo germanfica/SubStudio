@@ -5,6 +5,9 @@
 #include <wx/textfile.h>
 #include <wx/ffile.h>
 
+#include <wx/regex.h>
+#include <cmath>
+
 void Subtitles::Clear() {
     entries_.clear();
     path_.clear();
@@ -26,7 +29,7 @@ void Subtitles::EnsureRow(size_t row) {
 void Subtitles::SetRowText(size_t row, const wxString& text) {
     EnsureRow(row);
     entries_[row].text = text;
-    // Si querés marcar sucio automáticamente, descomentá:
+    // Si queres marcar sucio automáticamente, descomentá:
     // dirty_ = true;
 }
 
@@ -40,6 +43,59 @@ void Subtitles::SetRowTimes(size_t row, double start_time, double end_time) {
 void Subtitles::ResequenceLineNumbers() {
     for (size_t i = 0; i < entries_.size(); ++i)
         entries_[i].line_number = static_cast<int>(i + 1);
+}
+
+int ComputeCpsVisible(const wxString& src, double start_sec, double end_sec) {
+    // duration en ms
+    const double dur_s = end_sec - start_sec;
+    const int duration_ms = static_cast<int>(std::llround(dur_s * 1000.0));
+    if (duration_ms <= 100) // demasiado corta para calcular confiable (100ms)
+        return 0;
+
+    // Normalizar saltos
+    wxString s = src;
+    s.Replace("\r\n", "\n");
+    s.Replace("\r", "\n");
+
+    // Remover bloques {...} y <...>, manejar escapes \N / \n
+    wxString visible;
+    visible.reserve(s.length());
+    bool inBrace = false;
+    bool inTag = false;
+
+    for (size_t i = 0; i < s.length(); ++i) {
+        wxUniChar ch = s[i];
+
+        if (!inBrace && ch == '{') { inBrace = true; continue; }
+        if (inBrace) { if (ch == '}') inBrace = false; continue; }
+
+        if (!inTag && ch == '<') { inTag = true; continue; }
+        if (inTag) { if (ch == '>') inTag = false; continue; }
+
+        // \N or \n (ASS/escaped newline) => treat as newline (not counted)
+        if (ch == '\\' && i + 1 < s.length()) {
+            wxUniChar nxt = s[i + 1];
+            if (nxt == 'N' || nxt == 'n') { ++i; visible += '\n'; continue; }
+        }
+
+        if (ch == '\r' || ch == '\n') { visible += '\n'; continue; }
+
+        // todo: si queres ignorar espacios/puntuacion, hacerlo aquí
+        visible += ch;
+    }
+
+    // Contar solo caracteres visibles (no contamos '\n')
+    int chars = 0;
+    for (wxUniChar ch : visible) {
+        if (ch == '\n') continue;
+        ++chars;
+    }
+    if (chars == 0) return 0;
+
+    // CPS = chars / seconds -> usando ms da chars*1000 / duration_ms (int)
+    const int cps = static_cast<int>(std::round(static_cast<double>(chars) * 1000.0 / duration_ms));
+
+    return cps;
 }
 
 // --- Overloads simples de SRT I/O trabajando con Subtitles.
@@ -97,9 +153,9 @@ namespace srt {
                 continue;
             }
 
-            // ExpectText
-            if (!cur.text.IsEmpty()) cur.text << "\n";
-            cur.text << line;
+            // ExpectText: concatenamos manualmente
+            if (!cur.text.IsEmpty()) cur.text += "\n";
+            cur.text += line;
         }
 
         // Flush final si no terminó en línea vacía
@@ -122,9 +178,14 @@ namespace srt {
             const int idx = (e.line_number > 0) ? e.line_number : static_cast<int>(i + 1);
 
             wxString block;
-            block << idx << "\n";
-            block << SubstudioFormatTime(e.start_time) << " --> " << SubstudioFormatTime(e.end_time) << "\n";
-            block << e.text << "\n\n";
+            // concatenamos en lugar de usar operator<<
+            block += wxString::Format("%d\n", idx);
+            block += SubstudioFormatTime(e.start_time);
+            block += " --> ";
+            block += SubstudioFormatTime(e.end_time);
+            block += "\n";
+            block += e.text;
+            block += "\n\n";
 
             if (f.Write(block) == 0) return false;
         }

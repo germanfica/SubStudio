@@ -3,6 +3,7 @@
 #include "substudio_time.h"
 #include "substudio_textfmt.h"
 #include <wx/regex.h>
+#include "subtitle.h"
 
 // Config centralizados para UI
 namespace {
@@ -198,13 +199,11 @@ void SubstudioGridTable::Reindex() {
 }
 
 int SubstudioGridTable::ComputeCps(const wxString& text, double start, double end) {
-    if (!(end > start)) return 0;
-    double dur = std::max(0.01, end - start);
-    wxString flat = text;
-    flat.Replace("\r", "");
-    flat.Replace("\n", "");
-    int chars = static_cast<int>(flat.length());
-    return static_cast<int>(std::round(chars / dur));
+    SubtitleEntry tmp;
+    tmp.start_time = start;
+    tmp.end_time = end;
+    tmp.text = text;
+    return tmp.Cps();
 }
 
 void SubstudioGridTable::RecalcRow(int row) {

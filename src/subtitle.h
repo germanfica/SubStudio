@@ -5,21 +5,24 @@
 #include <algorithm>
 #include <cmath>
 #include <wx/string.h>
+#include <wx/log.h>
+
+int ComputeCpsVisible(const wxString& src, double start_sec, double end_sec);
+
 
 struct SubtitleEntry {
     int      line_number = 0;   // 1..N (display)
-    double   start_time = 0;   // seconds
-    double   end_time = 0;   // seconds
+    double   start_time = 0;    // seconds
+    double   end_time = 0;      // seconds
     wxString text;
 
     int Cps() const {
-        if (!(end_time > start_time)) return 0;
-        const double dur = std::max(0.01, end_time - start_time);
-        wxString flat = text;
-        flat.Replace("\r", "");
-        flat.Replace("\n", "");
-        const int chars = static_cast<int>(flat.length());
-        return static_cast<int>(std::lround(chars / dur));
+        return ComputeCps(text, start_time, end_time);
+    }
+
+private:
+    static int ComputeCps(const wxString& t, double start, double end) {
+        return ComputeCpsVisible(t, start, end);
     }
 };
 
