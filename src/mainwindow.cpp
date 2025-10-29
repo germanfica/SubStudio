@@ -1,3 +1,4 @@
+// src/mainwindow.cpp
 #include "mainwindow.h"
 
 #include <wx/sizer.h>
@@ -42,8 +43,15 @@ MainWindow::MainWindow()
     // Layout: editor arriba, grilla abajo
     auto* top = new wxBoxSizer(wxVERTICAL);
 
-    grid_ = new SubstudioGrid(this, wxID_ANY);
+    // Grid enlazado al modelo 'doc_'
+    grid_ = new SubstudioGrid(this, doc_, wxID_ANY);
     grid_view_ = std::make_unique<GridView>(grid_);
+
+    // Seleccionar primera fila/columna de texto para que el editor tome contexto
+    if (grid_->GetNumberRows() > 0) {
+        grid_->SetGridCursor(0, COL_TEXT);
+        grid_->SelectRow(0);
+    }
 
     // SubstudioEditBox vinculado al grid por contexto del propio widget
     SubstudioContext ctx;
@@ -59,14 +67,16 @@ MainWindow::MainWindow()
     editor_ = edit_box_->GetTextCtrl();
     if (editor_) grid_->BindExternalEditor(editor_);
 
-    // Ligamos el handler al propio edit_box_ (fuente) para que se limpie automáticamente
+    // Escuchar commits del editor (cuando el widget decide volcar cambios explícitos)
     if (edit_box_) {
         edit_box_->Bind(EVT_SUBSTUDIO_COMMIT_TEXT, [this](wxCommandEvent& e) {
             const int row = e.GetInt();
             const wxString text = e.GetString();
             if (row >= 0) {
+                // Actualizar modelo + vista (GridTable ya parsea '\N' -> '\n')
                 doc_.SetRowText(static_cast<size_t>(row), text);
                 if (grid_view_) grid_view_->UpdateRowText(row, text);
+                doc_.set_dirty(true);
                 UpdateWindowTitle();
                 SetStatusText(wxString::Format(wxS("Edited row %d"), row + 1));
             }
@@ -81,6 +91,8 @@ MainWindow::MainWindow()
 
     // Estado inicial
     doc_.Clear();
+    grid_->EnsureOneRowPresent();   // asegura al menos 1 fila visible
+    grid_->SyncToModel();           // asegura que el grid muestre la cantidad de filas del modelo
     UpdateWindowTitle();
 
     CentreOnScreen();
@@ -95,7 +107,7 @@ MainWindow::~MainWindow() {
         grid_view_.reset();
     }
 
-    // Destruir children explícitamente para asegurar orden (opcional pero ayuda a evitar double-frees)
+    // Destruir children explícitamente para asegurar orden (opcional)
     DestroyChildren();
 
     wxLogDebug("~MainWindow(): teardown done");
@@ -106,12 +118,9 @@ void MainWindow::UpdateWindowTitle() {
         ? wxString(wxS("Untitled"))
         : wxFileName(doc_.path()).GetFullName();
 
-    wxString prefix;
-    if (doc_.dirty())
-        prefix = wxString(wxS("*"));
-    else
-        prefix = wxEmptyString;
-
+    const wxString prefix = doc_.dirty()
+        ? wxString(wxS("*"))
+        : wxString(wxS(""));
     SetTitle(prefix + name + wxString(wxS(" - SubStudio 0.1.0")));
 }
 
@@ -128,6 +137,7 @@ bool MainWindow::PromptSaveIfDirty() {
         wxYES_NO | wxCANCEL | wxICON_WARNING);
     dlg.SetYesNoCancelLabels(wxString(wxS("Yes")), wxString(wxS("No")), wxString(wxS("Cancel")));
     dlg.SetAffirmativeId(wxID_YES);
+
     const int res = dlg.ShowModal();
     if (res == wxID_YES)  return DoSave();
     if (res == wxID_NO)   return true;
@@ -135,7 +145,10 @@ bool MainWindow::PromptSaveIfDirty() {
 }
 
 bool MainWindow::DoSaveAs() {
-    wxFileDialog dlg(this, wxString(wxS("Save subtitle file")), wxEmptyString, wxEmptyString,
+    wxFileDialog dlg(this,
+        wxString(wxS("Save subtitle file")),
+        wxEmptyString,
+        wxEmptyString,
         wxString(wxS("SubRip files (*.srt)|*.srt|All files (*.*)|*.*")),
         wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     if (dlg.ShowModal() != wxID_OK) return false;
@@ -146,51 +159,17 @@ bool MainWindow::DoSaveAs() {
 bool MainWindow::DoSave() {
     if (doc_.path().IsEmpty()) return DoSaveAs();
 
-    // 1) Asegurar que cualquier edicion pendiente del editor externo se vuelque a la grilla.
-    if (edit_box_) {
-        edit_box_->ForceCommit();  // vuelca sincronamente a la celda activa
-    }
+    // 1) Asegurar que cualquier edición pendiente del editor se vuelque a la grilla/modelo
+    if (edit_box_) edit_box_->ForceCommit();
 
-    // 2) Tomar un snapshot directo de la grilla (fuente de verdad de la UI)
-    //    para no depender de que 'doc_' este 100% sincronizado.
-    std::vector<SubtitleEntry> snapshot;
-    snapshot.reserve(grid_ ? grid_->GetNumberRows() : 0);
-
-    if (grid_) {
-        const int rows = grid_->GetNumberRows();
-        for (int r = 0; r < rows; ++r) {
-            SubtitleEntry e;
-            e.line_number = r + 1;
-
-            double t1 = 0.0, t2 = 0.0;
-            (void)SubstudioParseTime(grid_->GetCellValue(r, COL_START), t1);
-            (void)SubstudioParseTime(grid_->GetCellValue(r, COL_END), t2);
-            e.start_time = t1;
-            e.end_time = t2;
-
-            // El texto en la grilla viene formateado ("\\N" visible). Parsearlo a '\n' reales.
-            const wxString displayed = grid_->GetCellValue(r, COL_TEXT);
-            e.text = SubstudioParseGridText(displayed);
-
-            // Evitar persistir filas placeholder totalmente vacias (sin tiempo y sin texto)
-            wxString trimmed = e.text;
-            trimmed.Trim(true).Trim(false);
-            const bool emptyRow = trimmed.IsEmpty() && e.start_time <= 0.0 && e.end_time <= 0.0;
-            if (emptyRow) continue;
-
-            snapshot.push_back(std::move(e));
-        }
-    }
-
-    // 3) Guardar el snapshot al archivo SRT.
-    if (!srt::Save(doc_.path(), snapshot)) {
+    // 2) Guardar el modelo directamente (ya está sincronizado con la grilla)
+    if (!srt::Save(doc_.path(), doc_.entries())) {
         wxMessageBox(wxString(wxS("Failed to open file for writing: ")) + doc_.path(),
             wxString(wxS("Error")), wxICON_ERROR);
         return false;
     }
 
-    // 4) Mantener el modelo en memoria sincronizado con lo que se guardo.
-    doc_.entries() = snapshot;
+    // 3) Normalizar numeración y estado
     doc_.ResequenceLineNumbers();
     doc_.set_dirty(false);
     UpdateWindowTitle();
@@ -202,7 +181,10 @@ bool MainWindow::DoSave() {
 void MainWindow::ActionOpen() {
     if (!PromptSaveIfDirty()) return;
 
-    wxFileDialog dlg(this, wxString(wxS("Open subtitle file")), wxEmptyString, wxEmptyString,
+    wxFileDialog dlg(this,
+        wxString(wxS("Open subtitle file")),
+        wxEmptyString,
+        wxEmptyString,
         wxString(wxS("SubRip files (*.srt)|*.srt|All files (*.*)|*.*")),
         wxFD_OPEN | wxFD_FILE_MUST_EXIST);
     if (dlg.ShowModal() != wxID_OK) return;
@@ -214,11 +196,20 @@ void MainWindow::ActionOpen() {
         return;
     }
 
+    // Actualizar modelo
     doc_.entries() = std::move(tmp);
     doc_.set_path(dlg.GetPath());
     doc_.set_dirty(false);
+    doc_.ResequenceLineNumbers();
 
-    if (grid_view_) grid_view_->Populate(doc_.entries());
+    // Sincronizar vista con modelo
+    grid_->SyncToModel();
+
+    // Ajustes visuales
+    if (grid_->GetNumberRows() > 0) {
+        grid_->SetGridCursor(0, COL_TEXT);
+        grid_->SelectRow(0);
+    }
     if (grid_view_) grid_view_->AdjustTextColumnWidth(this);
 
     UpdateWindowTitle();
@@ -234,16 +225,13 @@ void MainWindow::ActionAbout() {
 }
 
 // Eventos
-void MainWindow::OnEditorText(wxCommandEvent& WXUNUSED(ev)) {
-    if (!editor_) return;
-    int row = grid_->GetGridCursorRow();
-    if (row < 0 || row >= static_cast<int>(doc_.entries().size())) return;
-
-    const wxString txt = editor_->GetValue();
-    doc_.SetRowText(static_cast<size_t>(row), txt);
-    if (grid_view_) grid_view_->UpdateRowText(row, txt);
-    UpdateWindowTitle();
-    SetStatusText(wxString::Format(wxS("Edited row %d"), row + 1));
+void MainWindow::OnEditorText(wxCommandEvent& ev) {
+    // El grid ya sincroniza el modelo en OnEditorTyped; acá solo marcamos 'dirty'
+    if (!doc_.dirty()) {
+        doc_.set_dirty(true);
+        UpdateWindowTitle();
+    }
+    ev.Skip();
 }
 
 void MainWindow::OnClose(wxCloseEvent& ev) {

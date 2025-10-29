@@ -2,28 +2,24 @@
 #ifndef SUBSTUDIO_GRID_H
 #define SUBSTUDIO_GRID_H
 
+// Evitar macros min/max de Windows que rompen std::min/std::max
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <wx/wx.h>
 #include <wx/grid.h>
 #include <vector>
 #include <algorithm>
 #include <cmath>
-// ---- Helpers de tiempo (SUBSTUDIO)
-////#include "substudio_time.h"
-//enum class TimeFormat : int;
-//enum class TimeParseFlags : int;
+
+#include "subtitle.h"         // Subtitles, SubtitleEntry
+#include "substudio_time.h"   // SubstudioFormatTime, SubstudioParseTime, TimeFormat, TimeParseFlags, kDefaultParseFlags
+#include "substudio_textfmt.h"// SubstudioFormatGridText, SubstudioParseGridText
 
 class wxTextCtrl;
 
-// ---- Modelo de datos de una fila de subtítulo (SUBSTUDIO)
-struct SubstudioRow {
-    int         index = 0;     // 1..N (solo display)
-    double      start = 0.0;   // segundos
-    double      end = 0.0;     // segundos
-    int         cps = 0;       // chars por segundo (calculado)
-    wxString    text;          // texto
-};
-
-// ---- Columnas
+// Columnas de la grilla
 enum SubstudioCol : int {
     COL_NUM = 0,
     COL_START,
@@ -33,20 +29,20 @@ enum SubstudioCol : int {
     COL_COUNT
 };
 
-// ---- Proveedor de atributos con zebra striping y celdas RO por columna (SUBSTUDIO)
+// Proveedor de atributos (zebra striping, columnas RO, alineaciones)
 class SubstudioAttrProvider : public wxGridCellAttrProvider {
 public:
     SubstudioAttrProvider();
     wxGridCellAttr* GetAttr(int row, int col, wxGridCellAttr::wxAttrKind kind) const override;
 };
 
-// ---- Tabla wxGridTableBase: encapsula filas y recalcula CPS (SUBSTUDIO)
+// Tabla wxGridTableBase: presenta y escribe sobre Subtitles (modelo)
 class SubstudioGridTable : public wxGridTableBase {
 public:
-    SubstudioGridTable();
+    explicit SubstudioGridTable(Subtitles& model);
 
     // wxGridTableBase
-    int GetNumberRows() override { return static_cast<int>(m_rows.size()); }
+    int GetNumberRows() override;
     int GetNumberCols() override { return COL_COUNT; }
 
     wxString GetValue(int row, int col) override;
@@ -63,48 +59,47 @@ public:
     long     GetValueAsLong(int row, int col) override;
     bool     IsEmptyCell(int row, int col) override;
 
-    // Para grid->AppendRows/DeleteRows
+    // Cambios de tamaño (opcional si se usa SyncToModel de la grilla)
     bool     AppendRows(size_t numRows = 1) override;
     bool     DeleteRows(size_t pos = 0, size_t numRows = 1) override;
 
-    // Helpers convenientes
-    void     AppendRow(const SubstudioRow& r);
-    void     EnsureOneRowPresent(); // si está vacío, agrega una fila 0/0/0/""
-
-    const std::vector<SubstudioRow>& Rows() const { return m_rows; }
+    // Asegura 1 fila visible al iniciar
+    void     EnsureOneRowPresent();
 
 private:
-    static void ClearRow(SubstudioRow& r);
-    void Reindex();
-    void RecalcRow(int row);
-    static int  ComputeCps(const wxString& text, double start, double end);
+    void     Reindex(); // actualiza line_number = 1..N
+    void     RepaintRow(int row);
+    static   int ComputeCpsFromTextTime(const wxString& gridText, double start, double end);
 
 private:
-    std::vector<SubstudioRow> m_rows;
+    Subtitles* model_ = nullptr; // no owning
 };
 
-// ---- Grid principal: configura columnas, editores y apariencia estilo SUBSTUDIO
+// Grid principal: configura columnas, editores, apariencia y sincroniza con el modelo
 class SubstudioGrid : public wxGrid {
 public:
     SubstudioGrid(wxWindow* parent,
+        Subtitles& model,
         wxWindowID id = wxID_ANY,
         const wxPoint& pos = wxDefaultPosition,
         const wxSize& size = wxDefaultSize,
         long style = wxWANTS_CHARS,
         const wxString& name = "SubstudioGrid");
 
-    void EnsureOneRowPresent() { m_table->EnsureOneRowPresent(); }
+    void EnsureOneRowPresent() { if (m_table) m_table->EnsureOneRowPresent(); }
 
-    // --- API para integrar editor externo ---
+    // Integración con editor externo
     void BindExternalEditor(wxTextCtrl* editor);
     int  GetCurrentRow() const { return GetGridCursorRow(); }
-    // Evita ambigüedad del operador ?: devolviendo wxString explícito en ambas ramas.
     wxString GetTextAt(int row) const {
-        return (row >= 0 && row < GetNumberRows())
-            ? GetCellValue(row, COL_TEXT)
-            : wxString(); // en lugar de wxEmptyString para evitar promoción ambigua
+        return (row >= 0 && row < GetNumberRows()) ? GetCellValue(row, COL_TEXT) : wxString();
     }
-    void SetTextAt(int row, const wxString& txt) { if (row >= 0 && row < GetNumberRows()) SetCellValue(row, COL_TEXT, txt); }
+    void SetTextAt(int row, const wxString& txt) {
+        if (row >= 0 && row < GetNumberRows()) SetCellValue(row, COL_TEXT, txt);
+    }
+
+    // Sincroniza la cantidad de filas mostradas con el tamaño del modelo
+    void SyncToModel();
 
 private:
     void ConfigureLook();
