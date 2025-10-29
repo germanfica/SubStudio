@@ -1,4 +1,4 @@
-#include "CpsRenderer.h"
+#include "cpsrenderer.h"
 #include <algorithm>
 
 wxColour CpsRenderer::Blend(const wxColour& fg, const wxColour& bg, double alpha) {

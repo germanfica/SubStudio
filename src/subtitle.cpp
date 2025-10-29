@@ -1,136 +1,145 @@
-// src/subtitle.cpp
 #include "subtitle.h"
-#include "substudio_time.h"
 
-#include <wx/textfile.h>
-#include <wx/ffile.h>
+#include <cmath>
+#include <cwctype>
+#include <utility>
+
+#include "srt_io.h"
+
+namespace {
+
+int VisibleLenForCps(const wxString& src) {
+  wxString normalized = src;
+  normalized.Replace("\r\n", "\n");
+  normalized.Replace("\r", "\n");
+  normalized.Replace("\\N", "\n");
+  normalized.Replace("\\n", "\n");
+
+  wxString without_tags;
+  without_tags.clear();
+  bool in_tag = false;
+  bool in_brace = false;
+  for (wxUniChar ch : normalized) {
+    const wchar_t value = static_cast<wchar_t>(ch.GetValue());
+    if (!in_tag && !in_brace) {
+      if (value == '<') {
+        in_tag = true;
+        continue;
+      }
+      if (value == '{') {
+        in_brace = true;
+        continue;
+      }
+      if (value == '\n') {
+        without_tags += static_cast<wxChar>(' ');
+      } else {
+        without_tags += ch;
+      }
+    } else {
+      if (in_tag && value == '>') {
+        in_tag = false;
+      } else if (in_brace && value == '}') {
+        in_brace = false;
+      }
+    }
+  }
+
+  wxString collapsed;
+  collapsed.clear();
+  bool previous_space = false;
+  for (wxUniChar ch : without_tags) {
+    const bool is_space = std::iswspace(static_cast<wint_t>(ch.GetValue())) != 0;
+    if (is_space) {
+      if (previous_space) {
+        continue;
+      }
+      collapsed += static_cast<wxChar>(' ');
+      previous_space = true;
+    } else {
+      collapsed += ch;
+      previous_space = false;
+    }
+  }
+
+  collapsed.Trim(true).Trim(false);
+  return static_cast<int>(collapsed.length());
+}
+
+}  // namespace
+
+int SubtitleEntry::Cps() const {
+  if (!(end_time > start_time)) {
+    return 0;
+  }
+
+  const int duration_ms =
+      static_cast<int>(std::lround((end_time - start_time) * 1000.0));
+  if (duration_ms <= 0) {
+    return 0;
+  }
+  if (duration_ms <= 100) {
+    return -1;
+  }
+
+  const int characters = VisibleLenForCps(text);
+  return (characters * 1000) / duration_ms;
+}
 
 void Subtitles::Clear() {
-    entries_.clear();
-    path_.clear();
-    dirty_ = false;
+  entries_.clear();
+  path_.clear();
+  dirty_ = false;
 }
 
 void Subtitles::EnsureRow(size_t row) {
-    if (row < entries_.size()) return;
-    size_t old = entries_.size();
-    entries_.resize(row + 1);
-    for (size_t i = old; i < entries_.size(); ++i) {
-        entries_[i].line_number = static_cast<int>(i + 1);
-        entries_[i].start_time = 0.0;
-        entries_[i].end_time = 0.0;
-        entries_[i].text.clear();
-    }
+  if (row < entries_.size()) {
+    return;
+  }
+
+  const size_t previous_size = entries_.size();
+  entries_.resize(row + 1);
+  for (size_t index = previous_size; index < entries_.size(); ++index) {
+    entries_[index].line_number = static_cast<int>(index + 1);
+    entries_[index].start_time = 0.0;
+    entries_[index].end_time = 0.0;
+    entries_[index].text.clear();
+  }
 }
 
 void Subtitles::SetRowText(size_t row, const wxString& text) {
-    EnsureRow(row);
-    entries_[row].text = text;
-    // Si querés marcar sucio automáticamente, descomentá:
-    // dirty_ = true;
+  EnsureRow(row);
+  entries_[row].text = text;
 }
 
 void Subtitles::SetRowTimes(size_t row, double start_time, double end_time) {
-    EnsureRow(row);
-    entries_[row].start_time = start_time;
-    entries_[row].end_time = end_time;
-    // dirty_ = true;
+  EnsureRow(row);
+  entries_[row].start_time = start_time;
+  entries_[row].end_time = end_time;
 }
 
 void Subtitles::ResequenceLineNumbers() {
-    for (size_t i = 0; i < entries_.size(); ++i)
-        entries_[i].line_number = static_cast<int>(i + 1);
+  for (size_t index = 0; index < entries_.size(); ++index) {
+    entries_[index].line_number = static_cast<int>(index + 1);
+  }
 }
 
-// --- Overloads simples de SRT I/O trabajando con Subtitles.
-//     Podés seguir usando srt_io.cpp con std::vector<SubtitleEntry> según convenga.
 namespace srt {
 
-    bool Load(const wxString& path, Subtitles& out) {
-        wxTextFile tf;
-        if (!tf.Open(path)) return false;
+bool Load(const wxString& path, Subtitles& out) {
+  std::vector<SubtitleEntry> entries;
+  if (!Load(path, entries)) {
+    return false;
+  }
 
-        out.Clear();
-        SubtitleEntry cur;
-        enum State { ExpectIndex, ExpectTime, ExpectText } state = ExpectIndex;
-        int autoIndex = 0;
+  out.Clear();
+  out.entries() = std::move(entries);
+  out.set_path(path);
+  out.set_dirty(false);
+  return true;
+}
 
-        const size_t N = tf.GetLineCount();
-        for (size_t i = 0; i < N; ++i) {
-            wxString line = tf.GetLine(i);
-            wxString trimmed = line;
-            trimmed.Trim(true).Trim(false);
+bool Save(const wxString& path, const Subtitles& in) {
+  return Save(path, in.entries());
+}
 
-            if (trimmed.IsEmpty()) {
-                if (state == ExpectText) {
-                    if (cur.line_number <= 0) cur.line_number = ++autoIndex;
-                    out.entries().push_back(cur);
-                    cur = SubtitleEntry{};
-                    state = ExpectIndex;
-                }
-                continue;
-            }
-
-            if (state == ExpectIndex) {
-                long n = 0;
-                if (trimmed.ToLong(&n)) cur.line_number = static_cast<int>(n);
-                else cur.line_number = 0; // se asignará al flush si queda 0
-                state = ExpectTime;
-                continue;
-            }
-
-            if (state == ExpectTime) {
-                const wxString arrow = " --> ";
-                const int pos = trimmed.Find(arrow);
-                if (pos != wxNOT_FOUND) {
-                    wxString s1 = trimmed.Left(pos);
-                    wxString s2 = trimmed.Mid(pos + arrow.Len());
-                    s1.Trim(true).Trim(false);
-                    s2.Trim(true).Trim(false);
-
-                    cur.start_time = 0.0;
-                    cur.end_time = 0.0;
-                    (void)SubstudioParseTime(s1, cur.start_time);
-                    (void)SubstudioParseTime(s2, cur.end_time);
-                }
-                state = ExpectText;
-                continue;
-            }
-
-            // ExpectText
-            if (!cur.text.IsEmpty()) cur.text << "\n";
-            cur.text << line;
-        }
-
-        // Flush final si no terminó en línea vacía
-        if (state == ExpectText &&
-            (!cur.text.IsEmpty() || cur.start_time > 0.0 || cur.end_time > 0.0)) {
-            if (cur.line_number <= 0) cur.line_number = static_cast<int>(out.size() + 1);
-            out.entries().push_back(cur);
-        }
-
-        return true;
-    }
-
-    bool Save(const wxString& path, const Subtitles& in) {
-        wxFFile f(path, "w");
-        if (!f.IsOpened()) return false;
-
-        for (size_t i = 0; i < in.entries().size(); ++i) {
-            const auto& e = in.entries()[i];
-
-            const int idx = (e.line_number > 0) ? e.line_number : static_cast<int>(i + 1);
-
-            wxString block;
-            block << idx << "\n";
-            block << SubstudioFormatTime(e.start_time) << " --> " << SubstudioFormatTime(e.end_time) << "\n";
-            block << e.text << "\n\n";
-
-            if (f.Write(block) == 0) return false;
-        }
-
-        f.Close();
-        return true;
-    }
-
-} // namespace srt
+}  // namespace srt

@@ -22,8 +22,8 @@ find_package(wxWidgets REQUIRED COMPONENTS core base adv)
 # --- Define executable ---
 #add_executable(substudio
 #  src/main.cpp
-#  src/mainwindow.cpp
-#  src/mainwindow.h
+#  src/main_window.cpp
+#  src/main_window.h
 #  src/subtitlemodel.cpp
 #  src/subtitlemodel.h
 #  src/cpsrenderer.cpp

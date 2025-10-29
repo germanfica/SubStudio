@@ -1,4 +1,4 @@
-// src/substudiogrid.h
+// src/substudio_grid.h
 #ifndef SUBSTUDIO_GRID_H
 #define SUBSTUDIO_GRID_H
 
@@ -14,7 +14,7 @@
 
 class wxTextCtrl;
 
-// ---- Modelo de datos de una fila de subtítulo (SUBSTUDIO)
+// ---- Modelo de datos de una fila de subttulo (SUBSTUDIO)
 struct SubstudioRow {
     int         index = 0;     // 1..N (solo display)
     double      start = 0.0;   // segundos
@@ -69,7 +69,7 @@ public:
 
     // Helpers convenientes
     void     AppendRow(const SubstudioRow& r);
-    void     EnsureOneRowPresent(); // si está vacío, agrega una fila 0/0/0/""
+    void     EnsureOneRowPresent(); // si est vaco, agrega una fila 0/0/0/""
 
     const std::vector<SubstudioRow>& Rows() const { return m_rows; }
 
@@ -98,11 +98,11 @@ public:
     // --- API para integrar editor externo ---
     void BindExternalEditor(wxTextCtrl* editor);
     int  GetCurrentRow() const { return GetGridCursorRow(); }
-    // Evita ambigüedad del operador ?: devolviendo wxString explícito en ambas ramas.
+    // Evita ambigedad del operador ?: devolviendo wxString explcito en ambas ramas.
     wxString GetTextAt(int row) const {
         return (row >= 0 && row < GetNumberRows())
             ? GetCellValue(row, COL_TEXT)
-            : wxString(); // en lugar de wxEmptyString para evitar promoción ambigua
+            : wxString(); // en lugar de wxEmptyString para evitar promocin ambigua
     }
     void SetTextAt(int row, const wxString& txt) { if (row >= 0 && row < GetNumberRows()) SetCellValue(row, COL_TEXT, txt); }
 
@@ -120,7 +120,7 @@ private:
 private:
     SubstudioGridTable* m_table = nullptr;
 
-    // Integración con editor externo
+    // Integracin con editor externo
     wxTextCtrl* m_externalEditor = nullptr;
     bool        m_syncGuard = false;
 

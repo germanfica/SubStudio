@@ -1,6 +1,6 @@
 // src/substudio_edit_box.cpp
 #include "substudio_edit_box.h"
-#include "substudiogrid.h" // sólo para usar SubstudioGrid API pública
+#include "substudio_grid.h" // slo para usar SubstudioGrid API pblica
 
 wxDEFINE_EVENT(EVT_SUBSTUDIO_COMMIT_TEXT, wxCommandEvent);
 
@@ -11,7 +11,7 @@ SubstudioEditBox::SubstudioEditBox(wxWindow* parent, const SubstudioContext& ctx
     : wxPanel(parent, id, pos, size, wxTAB_TRAVERSAL | wxBORDER_NONE)
     , m_ctx(ctx)
 {
-    // --- UI mínima
+    // --- UI mÃ­nima
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
     m_editor = new wxTextCtrl(this, wxID_ANY, "",
@@ -28,7 +28,7 @@ SubstudioEditBox::SubstudioEditBox(wxWindow* parent, const SubstudioContext& ctx
     m_editor->Bind(wxEVT_CHAR_HOOK, &SubstudioEditBox::OnEditorCharHook, this);
     m_editor->Bind(wxEVT_KILL_FOCUS, &SubstudioEditBox::OnEditorKillFocus, this);
 
-    // --- Inicializar contenido según selección actual del grid
+    // --- Inicializar contenido segÃºn selecciÃ³n actual del grid
     BindGridSignals();
     LoadFromRow(CurrentRowSafe());
 }
@@ -74,13 +74,13 @@ void SubstudioEditBox::CommitPending(bool moveToNext) {
 
     int row = CurrentRowSafe();
     if (row < 0) {
-        // si el grid quedó sin filas por alguna razón, créala
+        // si el grid quedÃ³ sin filas por alguna razÃ³n, crÃ©ala
         m_ctx.grid->EnsureOneRowPresent();
         row = 0;
     }
 
     // Volcar a la grilla (dispara SetValue -> recalcula CPS)
-    // Proteger de reentradas UI: el grid podría reflejar de vuelta
+    // Proteger de reentradas UI: el grid podrÃ­a reflejar de vuelta
     m_syncGuard = true;
     m_ctx.grid->SetCellValue(row, COL_TEXT, m_pending);
     m_syncGuard = false;
@@ -102,7 +102,7 @@ void SubstudioEditBox::CommitPending(bool moveToNext) {
     if (moveToNext) {
         int next = row + 1;
         if (next >= m_ctx.grid->GetNumberRows()) {
-            // política UX mínima: crear nueva fila al llegar al final
+            // polÃ­tica UX mÃ­nima: crear nueva fila al llegar al final
             m_ctx.grid->AppendRows(1);
         }
         m_ctx.grid->SetGridCursor(std::min(next, m_ctx.grid->GetNumberRows() - 1), COL_TEXT);
@@ -125,11 +125,11 @@ void SubstudioEditBox::UpdateCounter() {
 // ===================== Handlers del EDITOR =====================
 
 void SubstudioEditBox::OnEditorText(wxCommandEvent& e) {
-    if (m_syncGuard) return; // cambios programáticos
+    if (m_syncGuard) return; // cambios programÃ¡ticos
     m_pending = m_editor->GetValue();
     m_hasPending = true;
     UpdateCounter();
-    // ¡No propagamos! (no queremos que otros marquen dirty por cada tecla)
+    // Â¡No propagamos! (no queremos que otros marquen dirty por cada tecla)
     // Si alguien *quiere* enterarse en vivo, se puede agregar un evento onBufferChanged propio.
 }
 
@@ -151,7 +151,7 @@ void SubstudioEditBox::OnEditorCharHook(wxKeyEvent& e) {
 }
 
 void SubstudioEditBox::OnEditorKillFocus(wxFocusEvent& e) {
-    // Commit automático al perder foco, sin moverse
+    // Commit automÃ¡tico al perder foco, sin moverse
     CommitPending(false);
     e.Skip();
 }
@@ -159,7 +159,7 @@ void SubstudioEditBox::OnEditorKillFocus(wxFocusEvent& e) {
 // ===================== Handlers del GRID =====================
 
 void SubstudioEditBox::OnGridSelectCell(wxGridEvent& e) {
-    // Si hay edición pendiente, comitear antes de cambiar de fila
+    // Si hay ediciÃ³n pendiente, comitear antes de cambiar de fila
     if (m_hasPending) CommitPending(false);
     LoadFromRow(e.GetRow());
     e.Skip();

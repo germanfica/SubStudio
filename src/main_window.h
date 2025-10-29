@@ -1,8 +1,8 @@
-// src/mainwindow.h
+// src/main_window.h
 #pragma once
 
-#ifndef SUBSTUDIO_MAINWINDOW_H_
-#define SUBSTUDIO_MAINWINDOW_H_
+#ifndef SUBSTUDIO_MAIN_WINDOW_H_
+#define SUBSTUDIO_MAIN_WINDOW_H_
 
 // Evitar macros min/max de Windows que rompen std::min/std::max
 #ifndef NOMINMAX
@@ -60,4 +60,4 @@ private:
     wxDECLARE_EVENT_TABLE();
 };
 
-#endif  // SUBSTUDIO_MAINWINDOW_H_
+#endif  // SUBSTUDIO_MAIN_WINDOW_H_

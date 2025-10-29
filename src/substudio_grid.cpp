@@ -1,5 +1,5 @@
-// src/substudiogrid.cpp
-#include "substudiogrid.h"
+// src/substudio_grid.cpp
+#include "substudio_grid.h"
 #include "substudio_time.h"
 #include "substudio_textfmt.h"
 #include <wx/regex.h>
@@ -242,7 +242,7 @@ SubstudioGrid::SubstudioGrid(wxWindow* parent,
     ConfigureLook();
     ConfigureColumns();
 
-    // Garantizar 1 fila vacía inicial visible
+    // Garantizar 1 fila vaca inicial visible
     m_table->EnsureOneRowPresent();
 }
 
@@ -304,7 +304,7 @@ void SubstudioGrid::ConfigureColumns() {
         SetColAttr(COL_END, aEnd);
     }
 
-    // Text multilínea con auto wrap
+    // Text multilnea con auto wrap
     {
         wxGridCellAttr* aText = new wxGridCellAttr();
         aText->SetEditor(new wxGridCellAutoWrapStringEditor());

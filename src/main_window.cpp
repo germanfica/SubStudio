@@ -1,4 +1,4 @@
-#include "mainwindow.h"
+#include "main_window.h"
 
 #include <wx/sizer.h>
 #include <wx/textfile.h>
@@ -8,12 +8,12 @@
 #include <wx/app.h>
 
 #include "srt_io.h"
-#include "substudiogrid.h"
+#include "substudio_grid.h"
 #include "substudio_edit_box.h"
 #include "substudio_time.h"
 #include "substudio_textfmt.h"
 
-// Tabla de eventos mínima (editor, close, size)
+// Tabla de eventos mnima (editor, close, size)
 wxBEGIN_EVENT_TABLE(MainWindow, wxFrame)
 EVT_TEXT(wxID_ANY, OnEditorText)
 EVT_CLOSE(OnClose)
@@ -23,7 +23,7 @@ wxEND_EVENT_TABLE()
 MainWindow::MainWindow()
     : wxFrame(nullptr, wxID_ANY, wxS("SubStudio"), wxDefaultPosition, wxSize(900, 693)) {
 
-    // Menú y toolbar con callbacks desacoplados
+    // Men y toolbar con callbacks desacoplados
     MenuActions actions;
     actions.on_open = [this]() { ActionOpen(); };
     actions.on_save = [this]() { ActionSave(); };
@@ -59,7 +59,7 @@ MainWindow::MainWindow()
     editor_ = edit_box_->GetTextCtrl();
     if (editor_) grid_->BindExternalEditor(editor_);
 
-    // Ligamos el handler al propio edit_box_ (fuente) para que se limpie automáticamente
+    // Ligamos el handler al propio edit_box_ (fuente) para que se limpie automticamente
     if (edit_box_) {
         edit_box_->Bind(EVT_SUBSTUDIO_COMMIT_TEXT, [this](wxCommandEvent& e) {
             const int row = e.GetInt();
@@ -95,7 +95,7 @@ MainWindow::~MainWindow() {
         grid_view_.reset();
     }
 
-    // Destruir children explícitamente para asegurar orden (opcional pero ayuda a evitar double-frees)
+    // Destruir children explcitamente para asegurar orden (opcional pero ayuda a evitar double-frees)
     DestroyChildren();
 
     wxLogDebug("~MainWindow(): teardown done");

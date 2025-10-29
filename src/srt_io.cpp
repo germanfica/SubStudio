@@ -1,145 +1,189 @@
-// src/srt_io.cpp
 #include "srt_io.h"
+
+#include <cstddef>
+#include <cmath>
+#include <utility>
 
 #include <wx/ffile.h>
 #include <wx/textfile.h>
+
 #include "substudio_time.h"
 
 namespace {
 
-    // Format as strict SRT timestamp: HH:MM:SS,mmm with rounding and carry.
-    wxString FormatSrtTime(double seconds) {
-        if (seconds < 0) seconds = 0;
+constexpr char kArrow[] = " --> ";
+constexpr size_t kArrowLength = sizeof(kArrow) - 1;
 
-        // Round to nearest millisecond
-        long long total_ms = static_cast<long long>(std::llround(seconds * 1000.0));
+enum class ParseState { kExpectIndex, kExpectTimes, kExpectText };
 
-        long long ms = total_ms % 1000;
-        long long tot = total_ms / 1000;
+wxString FormatSrtTime(double seconds) {
+  if (seconds < 0.0) {
+    seconds = 0.0;
+  }
 
-        long long s = tot % 60;
-        tot /= 60;
+  const long long total_ms =
+      static_cast<long long>(std::llround(seconds * 1000.0));
 
-        long long m = tot % 60;
-        long long h = tot / 60;
+  const long long ms = total_ms % 1000;
+  long long total_seconds = total_ms / 1000;
 
-        return wxString::Format("%lld:%02lld:%02lld,%03lld", h, m, s, ms);
-    }
+  const long long s = total_seconds % 60;
+  total_seconds /= 60;
 
-    // Normalize any CR/LF variants to '\n' to keep internal text consistent.
-    inline void NormalizeNewlines(wxString& s) {
-        s.Replace("\r\n", "\n");
-        s.Replace("\r", "\n");
-    }
+  const long long m = total_seconds % 60;
+  const long long h = total_seconds / 60;
 
-} // namespace
+  return wxString::Format("%lld:%02lld:%02lld,%03lld", h, m, s, ms);
+}
+
+void NormalizeNewlines(wxString* text) {
+  text->Replace("\r\n", "\n");
+  text->Replace("\r", "\n");
+}
+
+bool HasContent(const SubtitleEntry& entry) {
+  return entry.line_number != 0 || !entry.text.IsEmpty() ||
+         entry.start_time > 0.0 || entry.end_time > 0.0;
+}
+
+void FlushEntry(std::vector<SubtitleEntry>* out, SubtitleEntry* current,
+                int* next_auto_index) {
+  if (current->line_number <= 0) {
+    current->line_number = ++(*next_auto_index);
+  }
+  out->push_back(std::move(*current));
+  *current = SubtitleEntry{};
+}
+
+void AppendTextLine(const wxString& line, SubtitleEntry* current) {
+  if (!current->text.IsEmpty()) {
+    current->text << "\n";
+  }
+  current->text << line;
+}
+
+bool TryParseTimes(const wxString& trimmed_line, SubtitleEntry* current) {
+  const int arrow_pos = trimmed_line.Find(kArrow);
+  if (arrow_pos == wxNOT_FOUND) {
+    return false;
+  }
+
+  wxString start = trimmed_line.Left(arrow_pos);
+  wxString end =
+      trimmed_line.Mid(arrow_pos + static_cast<int>(kArrowLength));
+  start.Trim(true).Trim(false);
+  end.Trim(true).Trim(false);
+
+  double start_seconds = 0.0;
+  double end_seconds = 0.0;
+  (void)SubstudioParseTime(start, start_seconds);
+  (void)SubstudioParseTime(end, end_seconds);
+
+  current->start_time = start_seconds;
+  current->end_time = end_seconds;
+  return true;
+}
+
+}  // namespace
 
 namespace srt {
 
-    bool Load(const wxString& path, std::vector<SubtitleEntry>& out) {
-        wxTextFile tf;
-        if (!tf.Open(path)) return false;
+bool Load(const wxString& path, std::vector<SubtitleEntry>& out) {
+  wxTextFile file;
+  if (!file.Open(path)) {
+    return false;
+  }
 
-        out.clear();
+  out.clear();
 
-        SubtitleEntry cur;
-        enum State { kExpectIndex, kExpectTimes, kExpectText } state = kExpectIndex;
-        int auto_index = 0;
+  SubtitleEntry current;
+  ParseState state = ParseState::kExpectIndex;
+  int next_auto_index = 0;
 
-        const size_t N = tf.GetLineCount();
-        for (size_t i = 0; i < N; ++i) {
-            const wxString raw = tf.GetLine(i);
-            wxString line = raw;
-            wxString trimmed = raw;
-            trimmed.Trim(true).Trim(false);
+  const size_t line_count = file.GetLineCount();
+  for (size_t i = 0; i < line_count; ++i) {
+    const wxString line = file.GetLine(i);
 
-            // Empty line ends a block
-            if (trimmed.IsEmpty()) {
-                if (state == kExpectText) {
-                    if (cur.line_number <= 0) cur.line_number = ++auto_index;
-                    out.push_back(cur);
-                    cur = SubtitleEntry{};
-                    state = kExpectIndex;
-                }
-                continue;
-            }
+    wxString trimmed = line;
+    trimmed.Trim(true).Trim(false);
 
-            if (state == kExpectIndex) {
-                // If it's a number, keep it; otherwise assign sequentially later.
-                long n = 0;
-                if (trimmed.ToLong(&n)) cur.line_number = static_cast<int>(n);
-                else cur.line_number = 0; // will be assigned on flush
-                state = kExpectTimes;
-                continue;
-            }
-
-            if (state == kExpectTimes) {
-                const wxString arrow = " --> ";
-                const int pos = trimmed.Find(arrow);
-                if (pos != wxNOT_FOUND) {
-                    wxString s1 = trimmed.Left(pos);
-                    wxString s2 = trimmed.Mid(pos + arrow.Len());
-                    s1.Trim(true).Trim(false);
-                    s2.Trim(true).Trim(false);
-
-                    // Accept both ',' and '.' as milliseconds separator
-                    double t1 = 0.0, t2 = 0.0;
-                    (void)SubstudioParseTime(s1, t1); // returns bool; default flags accept common forms
-                    (void)SubstudioParseTime(s2, t2);
-
-                    cur.start_time = t1;
-                    cur.end_time = t2;
-                }
-                else {
-                    cur.start_time = 0.0;
-                    cur.end_time = 0.0;
-                }
-                state = kExpectText;
-                continue;
-            }
-
-            // kExpectText: accumulate verbatim lines (preserve original spacing)
-            if (!cur.text.IsEmpty()) cur.text << "\n";
-            cur.text << line;
+    if (trimmed.IsEmpty()) {
+      if (state == ParseState::kExpectText) {
+        if (HasContent(current)) {
+          FlushEntry(&out, &current, &next_auto_index);
         }
-
-        // Flush last block if file didn't end with a blank line
-        if (state == kExpectText &&
-            (!cur.text.IsEmpty() || cur.start_time > 0.0 || cur.end_time > 0.0))
-        {
-            if (cur.line_number <= 0) cur.line_number = static_cast<int>(out.size() + 1);
-            out.push_back(cur);
-        }
-
-        // Normalize text newlines for internal consistency
-        for (auto& e : out) NormalizeNewlines(e.text);
-
-        return true;
+        state = ParseState::kExpectIndex;
+      }
+      continue;
     }
 
-    bool Save(const wxString& path, const std::vector<SubtitleEntry>& entries) {
-        wxFFile f(path, "w");
-        if (!f.IsOpened()) return false;
-
-        for (size_t i = 0; i < entries.size(); ++i) {
-            const auto& e = entries[i];
-
-            // Use existing line_number if set; otherwise 1-based sequence.
-            const int index = (e.line_number > 0) ? e.line_number : static_cast<int>(i + 1);
-
-            wxString text = e.text;
-            NormalizeNewlines(text);
-
-            wxString block;
-            block << index << "\n";
-            block << FormatSrtTime(e.start_time) << " --> " << FormatSrtTime(e.end_time) << "\n";
-            block << text << "\n\n";
-
-            if (f.Write(block) == 0) return false;
+    switch (state) {
+      case ParseState::kExpectIndex: {
+        long index = 0;
+        if (trimmed.ToLong(&index)) {
+          current.line_number = static_cast<int>(index);
+        } else {
+          current.line_number = 0;
         }
+        state = ParseState::kExpectTimes;
+        break;
+      }
 
-        f.Close();
-        return true;
+      case ParseState::kExpectTimes: {
+        if (!TryParseTimes(trimmed, &current)) {
+          current.start_time = 0.0;
+          current.end_time = 0.0;
+        }
+        state = ParseState::kExpectText;
+        break;
+      }
+
+      case ParseState::kExpectText: {
+        AppendTextLine(line, &current);
+        break;
+      }
     }
+  }
 
-} // namespace srt
+  if (state == ParseState::kExpectText && HasContent(current)) {
+    FlushEntry(&out, &current, &next_auto_index);
+  }
+
+  for (auto& entry : out) {
+    NormalizeNewlines(&entry.text);
+  }
+
+  return true;
+}
+
+bool Save(const wxString& path, const std::vector<SubtitleEntry>& entries) {
+  wxFFile file(path, "w");
+  if (!file.IsOpened()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const SubtitleEntry& entry = entries[i];
+    const int index = entry.line_number > 0
+                          ? entry.line_number
+                          : static_cast<int>(i + 1);
+
+    wxString text = entry.text;
+    NormalizeNewlines(&text);
+
+    wxString block;
+    block << index << "\n";
+    block << FormatSrtTime(entry.start_time) << kArrow
+          << FormatSrtTime(entry.end_time) << "\n";
+    block << text << "\n\n";
+
+    if (file.Write(block) == 0u) {
+      return false;
+    }
+  }
+
+  file.Close();
+  return true;
+}
+
+}  // namespace srt

@@ -1,5 +1,5 @@
 #include <wx/wx.h>
-#include "MainWindow.h"
+#include "main_window.h"
 
 class SubStudioApp : public wxApp {
 public:

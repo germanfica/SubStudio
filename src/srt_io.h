@@ -1,20 +1,18 @@
-#pragma once
-
-#ifndef SUBSTUDIO_SRT_IO_H_
-#define SUBSTUDIO_SRT_IO_H_
+#ifndef SUBSTUDIO_SRC_SRT_IO_H_
+#define SUBSTUDIO_SRC_SRT_IO_H_
 
 #include <vector>
-#include "subtitle.h"
+
 #include <wx/string.h>
+
+#include "subtitle.h"
 
 namespace srt {
 
-	// Lee un archivo SRT a 'out'. Devuelve true en éxito.
-	bool Load(const wxString& path, std::vector<SubtitleEntry>& out);
+bool Load(const wxString& path, std::vector<SubtitleEntry>& out);
 
-	// Guarda 'entries' como SRT. Devuelve true en éxito.
-	bool Save(const wxString& path, const std::vector<SubtitleEntry>& entries);
+bool Save(const wxString& path, const std::vector<SubtitleEntry>& entries);
 
 }  // namespace srt
 
-#endif  // SUBSTUDIO_SRT_IO_H_
+#endif  // SUBSTUDIO_SRC_SRT_IO_H_

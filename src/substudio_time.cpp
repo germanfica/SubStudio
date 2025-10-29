@@ -4,7 +4,7 @@
 #include <cmath>
 
 // Helpers internos con linkage interno.
-// Preferimos no exponer símbolos innecesarios fuera de este .cpp.
+// Preferimos no exponer smbolos innecesarios fuera de este .cpp.
 namespace {
     inline void clamp_mm_ss(long& m, long& s) {
         if (m < 0) m = 0;
@@ -25,10 +25,10 @@ namespace {
         if (f3.IsEmpty()) f3 = "0";
     }
 
-    // Compila una sola vez cada regex (permitido y común: static local).
-    // Google C++ Style permite inicialización dinámica de estáticos locales.
+    // Compila una sola vez cada regex (permitido y comn: static local).
+    // Google C++ Style permite inicializacin dinmica de estticos locales.
     // (Pattern: "dynamic initialization of static local variables is allowed".)
-    // Ver guía. :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
+    // Ver gua. :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
 
     bool TryParseHHMMSSFF(const wxString& s, double& out) {
         static wxRegEx rx("^(\\d+):(\\d{1,2}):(\\d{1,2}):(\\d{1,2})$");
@@ -99,7 +99,7 @@ namespace {
     }
 } // namespace
 
-// -------------------- API pública --------------------
+// -------------------- API pblica --------------------
 
 wxString SubstudioFormatTime(double seconds, TimeFormat fmt) {
     if (seconds < 0) seconds = 0;
@@ -133,18 +133,18 @@ wxString SubstudioFormatTime(double seconds, TimeFormat fmt) {
     }
 }
 
-bool SubstudioParseTime(const wxString& in, double& outSeconds, TimeParseFlags flags) {
+bool SubstudioParseTime(const wxString& in, double& out_seconds, TimeParseFlags flags) {
     wxString s = in;
     s.Trim(true).Trim(false);
-    if (s.empty()) { outSeconds = 0.0; return true; }
+    if (s.empty()) { out_seconds = 0.0; return true; }
 
     const bool strict = HasFlag(flags, TimeParseFlags::TPF_STRICT);
 
     // Orden de prueba: formatos con mas informacion primero.
-    if (HasFlag(flags, TimeParseFlags::TPF_HH_MM_SS_CS) && TryParseHHMMSSFF(s, outSeconds)) return true;
-    if (HasFlag(flags, TimeParseFlags::TPF_HH_MM_SS_MS) && TryParseHHMMSSmmm(s, outSeconds)) return true;
-    if (HasFlag(flags, TimeParseFlags::TPF_MM_SS_CS) && TryParseMMSSff(s, outSeconds))    return true;
-    if (HasFlag(flags, TimeParseFlags::TPF_SS_CS) && TryParseSSff(s, outSeconds))      return true;
+    if (HasFlag(flags, TimeParseFlags::TPF_HH_MM_SS_CS) && TryParseHHMMSSFF(s, out_seconds)) return true;
+    if (HasFlag(flags, TimeParseFlags::TPF_HH_MM_SS_MS) && TryParseHHMMSSmmm(s, out_seconds)) return true;
+    if (HasFlag(flags, TimeParseFlags::TPF_MM_SS_CS) && TryParseMMSSff(s, out_seconds))    return true;
+    if (HasFlag(flags, TimeParseFlags::TPF_SS_CS) && TryParseSSff(s, out_seconds))      return true;
 
     if (strict) return false;
 
