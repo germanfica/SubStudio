@@ -19,6 +19,11 @@ SubstudioEditBox::SubstudioEditBox(wxWindow* parent, const SubstudioContext& ctx
         wxTE_MULTILINE | wxWANTS_CHARS | wxBORDER_SUNKEN);
     m_counter = new wxStaticText(this, wxID_ANY, "0 chars");
 
+    wxFont sys = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+    sys.SetPointSize(10);
+    m_editor->SetFont(sys);
+    m_counter->SetFont(sys);
+
     sizer->Add(m_editor, 1, wxEXPAND | wxALL, FromDIP(4));
     sizer->Add(m_counter, 0, wxRIGHT | wxBOTTOM | wxALIGN_RIGHT, FromDIP(6));
     SetSizerAndFit(sizer);
